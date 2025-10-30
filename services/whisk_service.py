@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 """
 Whisk Service - Google Labs Image Remix API integration
+Correct endpoints from real browser traffic
 """
 import requests
 import time
 import json
+import base64
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 
-WHISK_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+# Correct Whisk API endpoints
+WHISK_UPLOAD_ENDPOINT = "https://labs.google/fx/api/trpc/backbone.uploadImage"
+WHISK_RECIPE_ENDPOINT = "https://aisandbox-pa.googleapis.com/v1/whisk:runImageRecipe"
 
 
 class WhiskError(Exception):
@@ -17,162 +21,195 @@ class WhiskError(Exception):
     pass
 
 
-def _get_api_key() -> str:
-    """Get Google API key from config"""
-    try:
-        from utils import config as cfg
-        st = cfg.load() or {}
-        keys = st.get("google_api_keys") or []
-        if isinstance(keys, list) and keys:
-            return keys[0]
-        key = st.get("google_api_key")
-        if key:
-            return key
-        raise WhiskError("No Google API key found in config")
-    except Exception as e:
-        raise WhiskError(f"Failed to get API key: {e}")
-
-
-def upload_image_file(image_path: str) -> str:
-    """
-    Upload an image file to Google's media generation service
+class WhiskClient:
+    """Whisk API client with correct endpoints and authentication"""
     
-    Args:
-        image_path: Path to the image file
+    def __init__(self, session_tokens: Optional[List[str]] = None, oauth_tokens: Optional[List[str]] = None):
+        """
+        Initialize Whisk client
         
-    Returns:
-        mediaGenerationId string for use in recipe
+        Args:
+            session_tokens: List of session tokens from cookies (__Secure-next-auth.session-token)
+            oauth_tokens: List of OAuth tokens from Authorization headers (ya29...)
+        """
+        self.session_tokens = session_tokens or []
+        self.oauth_tokens = oauth_tokens or []
+    
+    def _get_session_token(self) -> Optional[str]:
+        """Get session token from config or init"""
+        if self.session_tokens:
+            return self.session_tokens[0]
         
-    Raises:
-        WhiskError: If upload fails
-    """
-    api_key = _get_api_key()
-    
-    # Read image file
-    try:
-        with open(image_path, 'rb') as f:
-            image_data = f.read()
-    except Exception as e:
-        raise WhiskError(f"Failed to read image file: {e}")
-    
-    # Determine mime type
-    ext = Path(image_path).suffix.lower()
-    mime_map = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.webp': 'image/webp'
-    }
-    mime_type = mime_map.get(ext, 'image/jpeg')
-    
-    # Upload to media generation endpoint
-    url = f"{WHISK_API_BASE}/media:upload?key={api_key}"
-    
-    try:
-        response = requests.post(
-            url,
-            files={'file': (Path(image_path).name, image_data, mime_type)},
-            timeout=60
-        )
-        response.raise_for_status()
-        data = response.json()
+        try:
+            from utils import config as cfg
+            st = cfg.load() or {}
+            tokens = st.get("tokens") or []
+            if isinstance(tokens, list) and tokens:
+                return tokens[0]
+        except Exception:
+            pass
         
-        media_id = data.get('mediaGenerationId')
-        if not media_id:
-            raise WhiskError(f"No mediaGenerationId in response: {data}")
+        return None
+    
+    def _get_oauth_token(self) -> Optional[str]:
+        """Get OAuth token from config or init"""
+        if self.oauth_tokens:
+            return self.oauth_tokens[0]
+        
+        try:
+            from utils import config as cfg
+            st = cfg.load() or {}
+            oauth_tokens = st.get("oauth_tokens") or []
+            if isinstance(oauth_tokens, list) and oauth_tokens:
+                return oauth_tokens[0]
+        except Exception:
+            pass
+        
+        return None
+    
+    def upload_image(self, image_path: str) -> str:
+        """
+        Upload an image file to Whisk upload endpoint
+        
+        Args:
+            image_path: Path to the image file
             
-        return media_id
-        
-    except requests.RequestException as e:
-        raise WhiskError(f"Upload request failed: {e}")
-
-
-def generate_with_references(
-    prompt: str,
-    subject_image_path: Optional[str] = None,
-    style_image_path: Optional[str] = None,
-    scene_image_path: Optional[str] = None,
-    timeout: int = 120
-) -> bytes:
-    """
-    Generate image using Whisk (Image Remix) with reference images
-    
-    Args:
-        prompt: Text prompt for generation
-        subject_image_path: Path to subject/model reference image
-        style_image_path: Path to style reference image
-        scene_image_path: Path to scene/product reference image
-        timeout: Request timeout in seconds
-        
-    Returns:
-        Generated image as bytes
-        
-    Raises:
-        WhiskError: If generation fails
-    """
-    api_key = _get_api_key()
-    
-    # Upload reference images
-    recipe_inputs = {}
-    
-    if subject_image_path:
-        try:
-            subject_id = upload_image_file(subject_image_path)
-            recipe_inputs['subject'] = {'mediaGenerationId': subject_id}
-        except Exception as e:
-            raise WhiskError(f"Failed to upload subject image: {e}")
-    
-    if style_image_path:
-        try:
-            style_id = upload_image_file(style_image_path)
-            recipe_inputs['style'] = {'mediaGenerationId': style_id}
-        except Exception as e:
-            raise WhiskError(f"Failed to upload style image: {e}")
+        Returns:
+            Upload ID/token for use in recipe
             
-    if scene_image_path:
-        try:
-            scene_id = upload_image_file(scene_image_path)
-            recipe_inputs['scene'] = {'mediaGenerationId': scene_id}
-        except Exception as e:
-            raise WhiskError(f"Failed to upload scene image: {e}")
-    
-    # Call runImageRecipe
-    url = f"{WHISK_API_BASE}/models/image-remix:runImageRecipe?key={api_key}"
-    
-    payload = {
-        "recipeMediaInputs": recipe_inputs,
-        "prompt": prompt
-    }
-    
-    try:
-        response = requests.post(
-            url,
-            json=payload,
-            timeout=timeout
-        )
-        response.raise_for_status()
-        data = response.json()
+        Raises:
+            WhiskError: If upload fails
+        """
+        session_token = self._get_session_token()
+        if not session_token:
+            raise WhiskError("No session token available for Whisk upload")
         
-        # Extract image URL or data from response
-        # The actual response format may vary - adjust as needed
-        if 'image' in data:
-            image_url = data['image'].get('url')
-            if image_url:
-                # Download the image
+        # Read image file
+        try:
+            with open(image_path, 'rb') as f:
+                image_data = f.read()
+        except Exception as e:
+            raise WhiskError(f"Failed to read image file: {e}")
+        
+        # Encode to base64
+        image_b64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Determine mime type
+        ext = Path(image_path).suffix.lower()
+        mime_map = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.webp': 'image/webp'
+        }
+        mime_type = mime_map.get(ext, 'image/jpeg')
+        
+        # Upload request with cookie-based auth
+        headers = {
+            'Cookie': f'__Secure-next-auth.session-token={session_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {
+            'image': image_b64,
+            'mimeType': mime_type
+        }
+        
+        try:
+            response = requests.post(
+                WHISK_UPLOAD_ENDPOINT,
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract upload ID from response
+            upload_id = data.get('result', {}).get('data', {}).get('uploadId')
+            if not upload_id:
+                raise WhiskError(f"No uploadId in response: {data}")
+                
+            return upload_id
+            
+        except requests.RequestException as e:
+            raise WhiskError(f"Upload request failed: {e}")
+    
+    def generate_with_references(
+        self,
+        prompt: str,
+        reference_images: Optional[List[str]] = None,
+        aspect_ratio: str = "9:16",
+        timeout: int = 120
+    ) -> bytes:
+        """
+        Generate image using Whisk recipe endpoint with reference images
+        
+        Args:
+            prompt: Text prompt for generation
+            reference_images: List of paths to reference images (model, product, etc.)
+            aspect_ratio: Aspect ratio (e.g., "9:16", "16:9", "1:1")
+            timeout: Request timeout in seconds
+            
+        Returns:
+            Generated image as bytes
+            
+        Raises:
+            WhiskError: If generation fails
+        """
+        oauth_token = self._get_oauth_token()
+        if not oauth_token:
+            raise WhiskError("No OAuth token available for Whisk recipe")
+        
+        # Upload reference images
+        uploaded_refs = []
+        if reference_images:
+            for img_path in reference_images:
+                try:
+                    upload_id = self.upload_image(img_path)
+                    uploaded_refs.append(upload_id)
+                except Exception as e:
+                    raise WhiskError(f"Failed to upload reference image: {e}")
+        
+        # Build recipe request (REMOVED invalid imageModel parameter)
+        headers = {
+            'Authorization': f'Bearer {oauth_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {
+            'prompt': prompt,
+            'aspectRatio': aspect_ratio,
+            'references': uploaded_refs
+        }
+        
+        try:
+            response = requests.post(
+                WHISK_RECIPE_ENDPOINT,
+                headers=headers,
+                json=payload,
+                timeout=timeout
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract image URL or data from response
+            if 'imageUrl' in data:
+                image_url = data['imageUrl']
                 img_response = requests.get(image_url, timeout=60)
                 img_response.raise_for_status()
                 return img_response.content
-        
-        # Alternative: check for inline image data
-        if 'imageData' in data:
-            import base64
-            return base64.b64decode(data['imageData'])
             
-        raise WhiskError(f"No image data in response: {data}")
-        
-    except requests.RequestException as e:
-        raise WhiskError(f"Recipe request failed: {e}")
+            if 'imageData' in data:
+                return base64.b64decode(data['imageData'])
+                
+            raise WhiskError(f"No image data in response: {data}")
+            
+        except requests.RequestException as e:
+            raise WhiskError(f"Recipe request failed: {e}")
 
+
+# Legacy/simplified interface functions
 
 def generate_image(
     prompt: str,
@@ -182,6 +219,7 @@ def generate_image(
 ) -> bytes:
     """
     Simplified interface for generating images with model and product references
+    Uses WhiskClient with auto-fallback to Gemini on failure
     
     Args:
         prompt: Text prompt for image generation
@@ -195,9 +233,26 @@ def generate_image(
     Raises:
         WhiskError: If generation fails
     """
-    return generate_with_references(
-        prompt=prompt,
-        subject_image_path=model_image,
-        scene_image_path=product_image,
-        timeout=timeout
-    )
+    # Try Whisk first
+    try:
+        client = WhiskClient()
+        reference_images = []
+        if model_image:
+            reference_images.append(model_image)
+        if product_image:
+            reference_images.append(product_image)
+        
+        return client.generate_with_references(
+            prompt=prompt,
+            reference_images=reference_images if reference_images else None,
+            timeout=timeout
+        )
+    except Exception as whisk_error:
+        # Auto-fallback to Gemini
+        try:
+            from services import image_gen_service
+            img_data = image_gen_service.generate_image_gemini(prompt, timeout)
+            if img_data:
+                return img_data
+        except Exception as gemini_error:
+            raise WhiskError(f"Whisk failed: {whisk_error}. Gemini fallback failed: {gemini_error}")

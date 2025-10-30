@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox, QLabel, 
     QLineEdit, QPlainTextEdit, QPushButton, QFileDialog, QComboBox, 
     QSpinBox, QScrollArea, QToolButton, QMessageBox, QFrame, QSizePolicy,
-    QTabWidget, QTextEdit
+    QTabWidget, QTextEdit, QDialog, QApplication
 )
 from PyQt5.QtGui import QFont, QPixmap, QImage
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
@@ -43,6 +43,210 @@ COLORS = {
     'right_text': '#e2e8f0',
     'right_accent': '#60a5fa',
 }
+
+
+class SceneCardWidget(QFrame):
+    """Scene card widget with image preview and action buttons"""
+    
+    def __init__(self, scene_data, parent=None):
+        super().__init__(parent)
+        self.scene_data = scene_data
+        self.image_label = None
+        self._build_ui()
+    
+    def _build_ui(self):
+        """Build the scene card UI"""
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: {COLORS['right_card']};
+                border: 1px solid {COLORS['right_border']};
+                border-radius: 8px;
+                padding: 10px;
+            }}
+        """)
+        
+        layout = QHBoxLayout(self)
+        
+        # Preview image
+        self.image_label = QLabel()
+        self.image_label.setFixedSize(320, 180)  # 16:9 preview
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setStyleSheet(f"border: 1px dashed {COLORS['right_border']}; background: black;")
+        self.image_label.setText("Chưa tạo")
+        layout.addWidget(self.image_label)
+        
+        # Info and buttons section
+        info_layout = QVBoxLayout()
+        
+        # Title
+        title = QLabel(f"Cảnh {self.scene_data.get('index')}")
+        title.setStyleSheet(f"color: {COLORS['right_accent']}; font-weight: bold; font-size: 16px;")
+        info_layout.addWidget(title)
+        
+        # Description
+        desc_text = self.scene_data.get('desc', '')
+        if len(desc_text) > 150:
+            desc_text = desc_text[:150] + "..."
+        desc = QLabel(desc_text)
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"color: {COLORS['right_text']}; font-size: 12px;")
+        info_layout.addWidget(desc)
+        
+        # Speech text
+        speech_text = self.scene_data.get('speech', '')
+        if len(speech_text) > 100:
+            speech_text = speech_text[:100] + "..."
+        speech = QLabel(f"🎤 {speech_text}")
+        speech.setWordWrap(True)
+        speech.setStyleSheet(f"color: #aaa; font-size: 11px; font-style: italic;")
+        info_layout.addWidget(speech)
+        
+        info_layout.addStretch(1)
+        
+        # Action buttons
+        btn_layout = QHBoxLayout()
+        
+        # Prompt button
+        btn_prompt = QPushButton("📝 Prompt ảnh/video")
+        btn_prompt.setStyleSheet("""
+            QPushButton {
+                background: #4A5568;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background: #60a5fa;
+            }
+        """)
+        btn_prompt.clicked.connect(self._show_prompts)
+        btn_layout.addWidget(btn_prompt)
+        
+        # Regenerate button
+        btn_regen = QPushButton("🔄 Tạo lại")
+        btn_regen.setStyleSheet("""
+            QPushButton {
+                background: #4A5568;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background: #26A69A;
+            }
+        """)
+        btn_layout.addWidget(btn_regen)
+        
+        # Video button
+        btn_video = QPushButton("🎬 Video")
+        btn_video.setStyleSheet("""
+            QPushButton {
+                background: #4A5568;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background: #0E7C66;
+            }
+        """)
+        btn_layout.addWidget(btn_video)
+        
+        info_layout.addLayout(btn_layout)
+        
+        layout.addLayout(info_layout, 1)
+    
+    def _show_prompts(self):
+        """Show prompt dialog with image and video prompts"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Prompts - Cảnh {self.scene_data.get('index')}")
+        dialog.setFixedSize(700, 500)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background: {COLORS['right_bg']};
+            }}
+            QLabel {{
+                color: {COLORS['right_text']};
+                font-weight: bold;
+                font-size: 13px;
+            }}
+            QTextEdit {{
+                background: {COLORS['right_card']};
+                color: {COLORS['right_text']};
+                border: 1px solid {COLORS['right_border']};
+                border-radius: 4px;
+                padding: 8px;
+                font-family: monospace;
+                font-size: 11px;
+            }}
+            QPushButton {{
+                background: {COLORS['right_accent']};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: #4A90E2;
+            }}
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Image prompt section
+        lbl_img = QLabel("📷 Prompt Ảnh:")
+        layout.addWidget(lbl_img)
+        
+        ed_img_prompt = QTextEdit()
+        ed_img_prompt.setReadOnly(True)
+        ed_img_prompt.setPlainText(self.scene_data.get('prompt_image', ''))
+        ed_img_prompt.setMaximumHeight(180)
+        layout.addWidget(ed_img_prompt)
+        
+        btn_copy_img = QPushButton("📋 Copy Prompt Ảnh")
+        btn_copy_img.clicked.connect(lambda: self._copy_to_clipboard(self.scene_data.get('prompt_image', '')))
+        layout.addWidget(btn_copy_img)
+        
+        # Video prompt section
+        lbl_vid = QLabel("🎬 Prompt Video:")
+        layout.addWidget(lbl_vid)
+        
+        ed_vid_prompt = QTextEdit()
+        ed_vid_prompt.setReadOnly(True)
+        ed_vid_prompt.setPlainText(self.scene_data.get('prompt_video', ''))
+        ed_vid_prompt.setMaximumHeight(180)
+        layout.addWidget(ed_vid_prompt)
+        
+        btn_copy_vid = QPushButton("📋 Copy Prompt Video")
+        btn_copy_vid.clicked.connect(lambda: self._copy_to_clipboard(self.scene_data.get('prompt_video', '')))
+        layout.addWidget(btn_copy_vid)
+        
+        # Close button
+        btn_close = QPushButton("✖ Đóng")
+        btn_close.clicked.connect(dialog.close)
+        layout.addWidget(btn_close)
+        
+        dialog.exec_()
+    
+    def _copy_to_clipboard(self, text):
+        """Copy text to clipboard"""
+        clipboard = QApplication.clipboard()
+        clipboard.setText(text)
+        # Show brief feedback
+        QMessageBox.information(self, "Thành công", "Đã copy vào clipboard!")
+    
+    def set_image(self, pixmap):
+        """Set the preview image"""
+        if self.image_label:
+            self.image_label.setPixmap(pixmap.scaled(320, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.image_label.setStyleSheet(f"border: 1px solid {COLORS['right_border']}; background: black;")
 
 
 class ImageGenerationWorker(QThread):
@@ -93,11 +297,16 @@ class ImageGenerationWorker(QThread):
                 # Fallback to Gemini or if Whisk not enabled
                 if img_data is None:
                     try:
-                        # Use Gemini image generation with rate limiting
+                        # Use Gemini image generation with rate limiting and debug logging
                         delay = 2.5 if i > 0 else 0
                         self.progress.emit(f"Cảnh {scene.get('index')}: Dùng Gemini...")
                         
-                        img_data = image_gen_service.generate_image_with_rate_limit(prompt, delay)
+                        # Pass log callback for enhanced debug output
+                        img_data = image_gen_service.generate_image_with_rate_limit(
+                            prompt, 
+                            delay, 
+                            log_callback=lambda msg: self.progress.emit(msg)
+                        )
                         
                         if img_data:
                             self.progress.emit(f"Cảnh {scene.get('index')}: Gemini ✓")
@@ -126,7 +335,11 @@ class ImageGenerationWorker(QThread):
                 try:
                     # Rate limit: 2.5s delay
                     delay = 2.5 if (len(scenes) + i) > 0 else 0
-                    thumb_data = image_gen_service.generate_image_with_rate_limit(prompt, delay)
+                    thumb_data = image_gen_service.generate_image_with_rate_limit(
+                        prompt, 
+                        delay,
+                        log_callback=lambda msg: self.progress.emit(msg)
+                    )
                     
                     if thumb_data:
                         # Save temp image for text overlay
@@ -786,49 +999,15 @@ class VideoBanHangPanel(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         
-        # Create cards
+        # Create cards using SceneCardWidget
         for scene in scenes:
-            card = QFrame()
-            card.setStyleSheet(f"""
-                QFrame {{
-                    background: {COLORS['right_card']};
-                    border: 1px solid {COLORS['right_border']};
-                    border-radius: 8px;
-                    padding: 10px;
-                }}
-            """)
-            
-            card_layout = QHBoxLayout(card)
-            
-            # Preview image placeholder
-            img_label = QLabel()
-            img_label.setFixedSize(120, 120)
-            img_label.setAlignment(Qt.AlignCenter)
-            img_label.setStyleSheet(f"border: 1px dashed {COLORS['right_border']}; background: black;")
-            img_label.setText("Chưa tạo")
-            card_layout.addWidget(img_label)
-            
-            # Text info
-            info_layout = QVBoxLayout()
-            
-            title = QLabel(f"Cảnh {scene.get('index')}")
-            title.setStyleSheet(f"color: {COLORS['right_accent']}; font-weight: bold; font-size: 14px;")
-            info_layout.addWidget(title)
-            
-            desc = QLabel(scene.get('desc', '')[:100] + "...")
-            desc.setWordWrap(True)
-            desc.setStyleSheet(f"color: {COLORS['right_text']};")
-            info_layout.addWidget(desc)
-            
-            info_layout.addStretch(1)
-            card_layout.addLayout(info_layout, 1)
-            
+            card = SceneCardWidget(scene)
             self.scenes_layout.addWidget(card)
             
-            # Store reference
+            # Store reference to the card and its image label
             scene_idx = scene.get('index')
             if scene_idx:
-                self.scene_images[scene_idx] = {'label': img_label, 'path': None}
+                self.scene_images[scene_idx] = {'card': card, 'label': card.image_label, 'path': None}
         
         self.scenes_layout.addStretch(1)
     
@@ -871,10 +1050,10 @@ class VideoBanHangPanel(QWidget):
         
         # Update UI
         if scene_idx in self.scene_images:
-            label = self.scene_images[scene_idx]['label']
-            pixmap = QPixmap(str(img_path))
-            label.setPixmap(pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            label.setStyleSheet(f"border: 1px solid {COLORS['right_border']}; background: black;")
+            card = self.scene_images[scene_idx].get('card')
+            if card:
+                pixmap = QPixmap(str(img_path))
+                card.set_image(pixmap)
             self.scene_images[scene_idx]['path'] = str(img_path)
         
         self._append_log(f"✓ Ảnh cảnh {scene_idx} đã sẵn sàng")
