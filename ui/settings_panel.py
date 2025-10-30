@@ -64,7 +64,7 @@ class SettingsPanel(QWidget):
         # Dòng 2: Labs + ProjectID | ElevenLabs + VoiceID
         row2 = _QW(); grid2 = QGridLayout(row2); grid2.setHorizontalSpacing(12); grid2.setVerticalSpacing(6)
         labs_init = self.state.get('labs_tokens') or self.state.get('tokens') or []
-        self.w_labs = KeyList(title='Google Labs Token', kind='labs', initial=labs_init)
+        self.w_labs = KeyList(title='Google Labs Token (OAuth)', kind='labs', initial=labs_init)
         grid2.addWidget(self.w_labs, 0, 0, 1, 1)
         self.ed_project = _line('Project ID'); self.ed_project.setText(self.state.get('flow_project_id','87b19267-13d6-49cd-a7ed-db19a90c9339'))
         proj_box = _QW(); hp = QHBoxLayout(proj_box); hp.setContentsMargins(0,0,0,0); hp.addWidget(_lab('Project ID cho Flow:')); hp.addWidget(self.ed_project)
@@ -75,6 +75,13 @@ class SettingsPanel(QWidget):
         voice_box = _QW(); hv = QHBoxLayout(voice_box); hv.setContentsMargins(0,0,0,0); hv.addWidget(_lab('Voice ID (Elevenlabs):')); hv.addWidget(self.ed_voice)
         grid2.addWidget(voice_box, 1, 1, 1, 1)
         root.addWidget(row2)
+
+        # Dòng 2b: Whisk Session Token (Cookie-based auth for upload)
+        row2b = QHBoxLayout()
+        session_init = self.state.get('session_tokens') or []
+        self.w_session = KeyList(title='Whisk Session Token (Cookie)', kind='session', initial=session_init)
+        row2b.addWidget(self.w_session)
+        root.addLayout(row2b)
 
         # Dòng 3: Google API | OpenAI API
         row3 = _QW(); grid3 = QGridLayout(row3); grid3.setHorizontalSpacing(12); grid3.setVerticalSpacing(6)
@@ -149,6 +156,7 @@ class SettingsPanel(QWidget):
             'google_workspace_oauth_token': self.ed_oauth.text().strip(),
             'labs_tokens': self.w_labs.get_keys(),
             'tokens': self.w_labs.get_keys(),
+            'session_tokens': self.w_session.get_keys(),
             'google_api_keys': self.w_google.get_keys(),
             'elevenlabs_api_keys': self.w_eleven.get_keys(),
             'openai_api_keys': self.w_openai.get_keys(),
