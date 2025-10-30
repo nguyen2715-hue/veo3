@@ -39,6 +39,12 @@ def check(kind: str, key: str) -> Tuple[bool, str]:
             if r.status_code==200: return True, f'OK @ {_ts()}'
             if r.status_code in (401,403): return False, _fmt_err('Unauthorized', r)
             return False, _fmt_err('HTTP', r)
+        if kind in ('session', 'whisk_session'):
+            # Session tokens are cookie-based, harder to validate without full context
+            # Just check if it looks like a valid JWT token
+            if k and len(k) > 50 and '.' in k:
+                return True, f'Format OK (not fully validated) @ {_ts()}'
+            return False, f'Invalid format @ {_ts()}'
     except Exception as e:
         return False, f'ERR {e} @ {_ts()}'
     return False, 'Unknown kind'
