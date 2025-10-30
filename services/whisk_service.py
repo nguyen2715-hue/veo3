@@ -4,12 +4,9 @@ Whisk Service - Google Labs Image Remix API integration
 Correct 3-step workflow from real browser traffic analysis
 """
 import requests
-import time
-import json
 import base64
 import uuid
 from typing import Dict, Any, List, Optional
-from pathlib import Path
 
 
 # Correct Whisk API endpoints from real browser traffic
@@ -28,18 +25,18 @@ class WhiskError(Exception):
 
 
 class WhiskClient:
-    """Whisk API client with correct endpoints and authentication"""
+    """Simplified Whisk client using only OAuth token"""
     
-    def __init__(self, session_tokens: Optional[List[str]] = None, oauth_tokens: Optional[List[str]] = None):
+    def __init__(self, oauth_tokens: Optional[List[str]] = None):
         """
         Initialize Whisk client
         
         Args:
-            session_tokens: List of session tokens from cookies (__Secure-next-auth.session-token)
-            oauth_tokens: List of OAuth tokens from Authorization headers (ya29...)
+            oauth_tokens: OAuth tokens from "Google Labs Token" field in Settings
+                         (saved as 'labs_tokens' or 'tokens' in config)
         """
-        self.session_tokens = session_tokens or []
         self.oauth_tokens = oauth_tokens or []
+        self._current_token_index = 0
     
     def _get_session_token(self) -> Optional[str]:
         """Get session token from config or init (for cookie-based upload auth)"""
@@ -175,6 +172,7 @@ class WhiskClient:
             session_id: Session ID
             aspect_ratio: Aspect ratio (e.g., "9:16")
             timeout: Request timeout in seconds
+            debug_callback: Optional callback function for debug messages
             
         Returns:
             Dict with imageUrl or None on failure
@@ -182,7 +180,12 @@ class WhiskClient:
         Raises:
             WhiskError: If generation fails
         """
-        oauth_token = self._get_oauth_token()
+        def _log(msg):
+            if debug_callback:
+                debug_callback(msg)
+        
+        # Get OAuth token
+        oauth_token = self._get_next_token()
         if not oauth_token:
             raise WhiskError("No OAuth token available for Whisk generation")
         
@@ -225,15 +228,15 @@ class WhiskClient:
             }
         }
         
+        # Make request
         try:
+            _log(f"[DEBUG] Sending Whisk request with {len(image_data_list)} references...")
             response = requests.post(
                 WHISK_RECIPE_ENDPOINT,
-                headers=headers,
                 json=payload,
+                headers=headers,
                 timeout=timeout
             )
-            response.raise_for_status()
-            data = response.json()
             
             # Extract image URL from response
             if 'generatedImages' in data and data['generatedImages']:
@@ -310,13 +313,13 @@ class WhiskClient:
         return result
 
 
-# Legacy/simplified interface functions
 
+# Simplified interface function for backward compatibility
 def generate_image(
     prompt: str,
     model_image: Optional[str] = None,
     product_image: Optional[str] = None,
-    timeout: int = 120
+    timeout: int = 90
 ) -> bytes:
     """
     Simplified interface for generating images with model and product references
@@ -332,7 +335,7 @@ def generate_image(
         Generated image as bytes
         
     Raises:
-        WhiskError: If generation fails
+        WhiskError: If both Whisk and Gemini fail
     """
     # Try Whisk 3-step workflow first
     try:
@@ -364,5 +367,6 @@ def generate_image(
             img_data = image_gen_service.generate_image_gemini(prompt, timeout)
             if img_data:
                 return img_data
+            raise WhiskError(f"Gemini returned no data")
         except Exception as gemini_error:
             raise WhiskError(f"Whisk failed: {whisk_error}. Gemini fallback failed: {gemini_error}")
