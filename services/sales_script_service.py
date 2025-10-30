@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import datetime, json, re
+from pathlib import Path
 from services.gemini_client import GeminiClient, MissingAPIKey
 
 def _scene_count(total_sec:int)->int:
@@ -145,6 +146,44 @@ def _build_image_prompt(struct:Dict[str,Any], visualStyleString:str)->str:
 - cartoon, illustration, drawing, sketch, anime, 3d render.
 """.strip()
 
+def _build_social_media_prompt(cfg: Dict[str, Any], outline_vi: str) -> str:
+    """Build prompt for generating social media content"""
+    platform = cfg.get("social_platform", "TikTok")
+    language = cfg.get("speech_lang", "vi")
+    product = cfg.get("product_main", "")
+    idea = cfg.get("idea", "")
+    
+    return f"""Create 3 different social media content versions for {platform}.
+
+Video Idea: {idea}
+Product/Content: {product}
+Video Outline: {outline_vi}
+Language: {language}
+Platform: {platform}
+
+For EACH of the 3 versions, provide:
+1. caption: Engaging post caption (2-3 lines, use emojis)
+2. hashtags: Array of relevant hashtags (5-8 tags)
+3. thumbnail_prompt: Prompt for 9:16 thumbnail image generation
+4. thumbnail_text_overlay: Short catchy text to overlay on thumbnail (ALL CAPS, max 25 chars)
+5. platform: "{platform}"
+6. language: "{language}"
+
+Output MUST be valid JSON with this structure:
+{{
+  "versions": [
+    {{
+      "caption": "...",
+      "hashtags": ["#tag1", "#tag2"],
+      "thumbnail_prompt": "9:16 vertical image...",
+      "thumbnail_text_overlay": "SHORT TEXT!",
+      "platform": "{platform}",
+      "language": "{language}"
+    }}
+  ]
+}}"""
+
+
 def build_outline(cfg:Dict[str,Any])->Dict[str,Any]:
     sceneCount = _scene_count(int(cfg.get("duration_sec") or 0))
     models_json = cfg.get("first_model_json") or ""
@@ -167,6 +206,7 @@ def build_outline(cfg:Dict[str,Any])->Dict[str,Any]:
 
     visualStyleString = cfg.get("image_style") or "Cinematic"
     outline_scenes = []
+    outline_vi = ""
     for sc in scenes:
         struct = (((sc or {}).get("prompt",{}) or {}).get("Output_Format",{}) or {}).get("Structure",{}) or {}
         img_prompt = _build_image_prompt(struct, visualStyleString)
@@ -175,14 +215,122 @@ def build_outline(cfg:Dict[str,Any])->Dict[str,Any]:
             "title": f"Cảnh {sc.get('scene')}",
             "desc": sc.get("description",""),
             "speech": sc.get("voiceover",""),
+            "emotion": struct.get("emotion", ""),
+            "duration": float(cfg.get("duration_sec", 32)) / sceneCount,
             "prompt_video": json.dumps(sc.get("prompt",{}), ensure_ascii=False),
             "prompt_image": img_prompt
         })
+        outline_vi += f"Cảnh {sc.get('scene')}: {sc.get('description', '')}\n"
+    
+    # Generate social media content (3 versions)
+    social_media = {"versions": []}
+    try:
+        social_prompt = _build_social_media_prompt(cfg, outline_vi)
+        social_raw = client.generate(social_prompt, "Return ONLY valid JSON.", timeout=120)
+        social_json = _try_parse_json(social_raw)
+        social_media = social_json if "versions" in social_json else {"versions": []}
+    except Exception:
+        # Fallback: create default versions
+        platform = cfg.get("social_platform", "TikTok")
+        language = cfg.get("speech_lang", "vi")
+        social_media = {
+            "versions": [
+                {
+                    "caption": "🎬 Video mới cực hay! Xem ngay!",
+                    "hashtags": ["#viral", "#trending"],
+                    "thumbnail_prompt": "9:16 vertical image with bright colors",
+                    "thumbnail_text_overlay": "XEM NGAY!",
+                    "platform": platform,
+                    "language": language
+                }
+            ]
+        }
 
     return {
         "meta": {"created_at": datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S"), "scenes": len(outline_scenes),
                  "ratio": cfg.get("ratio") or "9:16"},
         "script_json": script_json,
         "scenes": outline_scenes,
+        "social_media": social_media,
+        "outline_vi": outline_vi,
         "screenplay_text": json.dumps(script_json, ensure_ascii=False, indent=2)
     }
+
+
+def generate_thumbnail_with_text(base_image_path: str, text: str, output_path: str) -> None:
+    """
+    Generate thumbnail with text overlay using Pillow
+    
+    Args:
+        base_image_path: Path to base image
+        text: Text to overlay (will be wrapped)
+        output_path: Path to save output image
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        raise ImportError("Pillow is required. Install with: pip install Pillow>=10.0.0")
+    
+    # Open base image
+    img = Image.open(base_image_path)
+    
+    # Convert to RGB if needed
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    # Create drawing context
+    draw = ImageDraw.Draw(img)
+    
+    # Try to load a bold font, fallback to default
+    font_size = max(40, img.height // 20)
+    try:
+        # Try common font locations
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "C:\\Windows\\Fonts\\arialbd.ttf"
+        ]
+        font = None
+        for fp in font_paths:
+            if Path(fp).exists():
+                font = ImageFont.truetype(fp, font_size)
+                break
+        if font is None:
+            font = ImageFont.load_default()
+    except Exception:
+        font = ImageFont.load_default()
+    
+    # Text positioning - center top with semi-transparent background
+    text = text.upper()
+    
+    # Calculate text bounding box
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    
+    # Position at top center
+    x = (img.width - text_width) // 2
+    y = img.height // 8
+    
+    # Draw semi-transparent background
+    padding = 20
+    bg_bbox = [x - padding, y - padding, x + text_width + padding, y + text_height + padding]
+    
+    # Create overlay for semi-transparent background
+    overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    overlay_draw.rectangle(bg_bbox, fill=(0, 0, 0, 180))
+    
+    # Composite overlay
+    img = img.convert('RGBA')
+    img = Image.alpha_composite(img, overlay)
+    img = img.convert('RGB')
+    
+    # Draw text
+    draw = ImageDraw.Draw(img)
+    draw.text((x, y), text, font=font, fill=(255, 255, 255))
+    
+    # Save
+    output_dir = Path(output_path).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    img.save(output_path, quality=95)
