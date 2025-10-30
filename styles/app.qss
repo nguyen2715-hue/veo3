@@ -1,0 +1,9 @@
+
+* { font-family: Segoe UI, Arial, sans-serif; }
+QLabel#model_desc_label { font-size:12px; font-weight:600; border:none; margin-bottom:0px; }
+QLineEdit#ed_name { font-size:12px; padding:2px; min-height:24px; max-height:24px; }
+QPlainTextEdit#ed_idea { font-size:12px; padding:2px; min-height:30px; max-height:30px; }
+QPlainTextEdit#ed_product { font-size:12px; padding:2px; max-height:130px; }
+QPlainTextEdit#model_desc_edit { font-size:12px; padding:2px; min-height:80px; max-height:80px; border:1px solid #c8c8c8; }
+QComboBox#cb_lang, QComboBox#cb_ratio, QComboBox#cb_social, QComboBox#cb_style, QComboBox#cb_imgstyle, QComboBox#cb_script_model, QComboBox#cb_image_model { font-size:12px; min-height:24px; }
+QSpinBox#sp_duration, QSpinBox#sp_videos { font-size:12px; min-height:24px; }

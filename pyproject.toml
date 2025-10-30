@@ -1,0 +1,14 @@
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+src = ["."]
+exclude = ["build", "dist", ".venv", "venv", ".mypy_cache", ".ruff_cache"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["videoultra"]

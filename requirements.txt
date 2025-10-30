@@ -1,0 +1,3 @@
+# Installation tip: pip install -r requirements.txt -c constraints.txt
+PyQt5>=5.15
+requests>=2.31
