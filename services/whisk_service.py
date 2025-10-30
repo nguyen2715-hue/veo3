@@ -12,6 +12,10 @@ from typing import Dict, Any, List, Optional
 # Whisk API endpoint (OAuth-only, no upload needed)
 WHISK_RECIPE_ENDPOINT = "https://aisandbox-pa.googleapis.com/v1/whisk:runImageRecipe"
 
+# Configuration constants
+MAX_REFERENCE_IMAGES = 3  # Maximum number of reference images to send
+MAX_PROMPT_LENGTH = 500   # Maximum prompt length in characters
+
 
 class WhiskError(Exception):
     """Base exception for Whisk service errors"""
@@ -90,7 +94,7 @@ class WhiskClient:
         # Encode reference images to base64
         image_data_list = []
         if reference_images:
-            for img_path in reference_images[:3]:  # Limit to 3 images
+            for img_path in reference_images[:MAX_REFERENCE_IMAGES]:
                 try:
                     with open(img_path, 'rb') as f:
                         img_bytes = f.read()
@@ -123,7 +127,7 @@ class WhiskClient:
         }
         
         payload = {
-            "prompt": prompt[:500],  # Limit prompt length
+            "prompt": prompt[:MAX_PROMPT_LENGTH],
             "aspectRatio": aspect_map.get(aspect_ratio, "PORTRAIT"),
             "referenceImages": image_data_list,
             "numResults": 1
