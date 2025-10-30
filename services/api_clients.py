@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 from typing import Dict, Any, Tuple
 from services.http_retry import request_json
-from services.keys_manager import refresh, rotated_list
+from services.core.key_manager import get_all_keys
 from services.resilience import acquire
-from utils import config as cfg
 
 def labs_call(method:str, url:str, *, json_body=None, params=None, headers=None):
-    c = cfg.load(); refresh()
-    tokens = rotated_list('labs', c.get('labs_tokens') or c.get('tokens') or [])
+    tokens = get_all_keys('labs')
     last_err = ""; last_code = 0; last_headers = {}
     for t in tokens or [""]:
         h = dict(headers or {})
@@ -21,8 +19,7 @@ def labs_call(method:str, url:str, *, json_body=None, params=None, headers=None)
     return False, {"error": last_err, "trace": last_headers.get("x-request-id","")}, last_code, last_headers
 
 def google_call(method:str, url:str, *, json_body=None, params=None, headers=None):
-    c = cfg.load(); refresh()
-    keys = rotated_list('google', (c.get('google_api_keys') or []) + ([c.get('google_api_key')] if c.get('google_api_key') else []))
+    keys = get_all_keys('google')
     last_err = ""; last_code = 0; last_headers = {}
     for k in keys or [""]:
         p = dict(params or {})
@@ -36,8 +33,7 @@ def google_call(method:str, url:str, *, json_body=None, params=None, headers=Non
     return False, {"error": last_err, "trace": last_headers.get("x-request-id","")}, last_code, last_headers
 
 def openai_call(method:str, url:str, *, json_body=None, params=None, headers=None):
-    c = cfg.load(); refresh()
-    keys = rotated_list('openai', c.get('openai_api_keys') or [])
+    keys = get_all_keys('openai')
     last_err = ""; last_code = 0; last_headers = {}
     for k in keys or [""]:
         h = dict(headers or {})
@@ -51,8 +47,7 @@ def openai_call(method:str, url:str, *, json_body=None, params=None, headers=Non
     return False, {"error": last_err, "trace": last_headers.get("x-request-id","")}, last_code, last_headers
 
 def eleven_call(method:str, url:str, *, json_body=None, params=None, headers=None):
-    c = cfg.load(); refresh()
-    keys = rotated_list('elevenlabs', c.get('elevenlabs_api_keys') or [])
+    keys = get_all_keys('elevenlabs')
     last_err = ""; last_code = 0; last_headers = {}
     for k in keys or [""]:
         h = dict(headers or {})

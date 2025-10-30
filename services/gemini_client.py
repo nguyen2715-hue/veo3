@@ -1,24 +1,21 @@
 # -*- coding: utf-8 -*-
 import requests, time, random
 from typing import List, Optional
-from utils import config as cfg
+from services.core.config import load as load_config
+from services.core.key_manager import get_all_keys, refresh
+from services.core.api_config import GEMINI_TEXT_MODEL, gemini_text_endpoint
 
-DEFAULT_TEXT_MODEL = "gemini-2.5-flash"
 class MissingAPIKey(Exception): pass
 class GeminiClient:
     def __init__(self, model: str = None, api_key: Optional[str] = None):
-        st = cfg.load() or {}
-        keys: List[str] = []
-        for k in ("google_api_keys","google_api_key","google_keys"):
-            v = st.get(k)
-            if isinstance(v, list): keys += [s for s in v if isinstance(s,str) and s.strip()]
-            elif isinstance(v,str) and v.strip(): keys.append(v.strip())
+        refresh()
+        keys: List[str] = get_all_keys('google')
         if api_key: keys = [api_key] + [k for k in keys if k != api_key]
         self.keys = list(dict.fromkeys(keys))
         if not self.keys: raise MissingAPIKey("Chưa nhập Google API Key trong Cài đặt.")
-        random.shuffle(self.keys); self.rr=0; self.model=model or DEFAULT_TEXT_MODEL
+        random.shuffle(self.keys); self.rr=0; self.model=model or GEMINI_TEXT_MODEL
     def _next_key(self): k=self.keys[self.rr%len(self.keys)]; self.rr+=1; return k
-    def _endpoint(self, key): return f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={key}"
+    def _endpoint(self, key): return gemini_text_endpoint(key) if self.model == GEMINI_TEXT_MODEL else f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={key}"
     def generate(self, system_text: str, user_text: str, timeout: int = 180)->str:
         last=None
         for i in range(5):

@@ -1,35 +1,8 @@
 # -*- coding: utf-8 -*-
 import os, base64, json, requests, mimetypes, uuid, time
 from typing import Optional, Dict, Any
-
-
-def _cfg():
-    try:
-        from utils import config as cfg
-        return cfg.load() if hasattr(cfg, "load") else {}
-    except Exception:
-        return {}
-
-
-def _google_keys():
-    from services.keys_manager import refresh, rotated_list
-    c=_cfg(); refresh()
-    out=[]
-    # prefer list field
-    out += [k for k in (c.get("google_api_keys") or []) if k]
-    # legacy single
-    if c.get("google_api_key"): out.append(c["google_api_key"])
-    # legacy mixed store
-    for t in (c.get("tokens") or []):
-        if isinstance(t, dict) and t.get("kind") in ("gemini","google"):
-            v=t.get("token") or t.get("value")
-            if v: out.append(v)
-    # de-dup preserve order
-    seen=set(); out2=[]
-    for k in out:
-        if k and (k not in seen):
-            out2.append(k); seen.add(k)
-    return rotated_list('google', out2)
+from services.core.api_config import GEMINI_IMAGE_MODEL, gemini_image_endpoint, IMAGE_GEN_TIMEOUT
+from services.core.key_manager import get_all_keys, refresh
 
 
 class ImageGenError(Exception):
@@ -37,13 +10,13 @@ class ImageGenError(Exception):
     pass
 
 
-def generate_image_gemini(prompt: str, timeout: int = 120, retry_delay: float = 2.5, log_callback=None) -> bytes:
+def generate_image_gemini(prompt: str, timeout: int = None, retry_delay: float = 2.5, log_callback=None) -> bytes:
     """
-    Generate image using Gemini/Imagen API with enhanced debug logging
+    Generate image using Gemini Flash Image model with enhanced debug logging
     
     Args:
         prompt: Text prompt for image generation
-        timeout: Request timeout in seconds
+        timeout: Request timeout in seconds (default from api_config)
         retry_delay: Delay between retries (for rate limiting)
         log_callback: Optional callback function for logging (receives string messages)
         
@@ -57,7 +30,9 @@ def generate_image_gemini(prompt: str, timeout: int = 120, retry_delay: float = 
         if log_callback:
             log_callback(msg)
     
-    keys = _google_keys()
+    timeout = timeout or IMAGE_GEN_TIMEOUT
+    refresh()  # Refresh key pool
+    keys = get_all_keys('google')
     if not keys:
         raise ImageGenError("No Google API keys available")
     
@@ -70,18 +45,17 @@ def generate_image_gemini(prompt: str, timeout: int = 120, retry_delay: float = 
             key_preview = f"...{api_key[-6:]}" if len(api_key) > 6 else "***"
             log(f"[INFO] Key {key_preview} (lần {key_idx + 1})")
             
-            # Gemini Imagen endpoint (simplified - may need adjustment)
-            # Using the generateImages endpoint from Vertex AI or similar
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key={api_key}"
+            # FIXED: Use correct Gemini Flash Image model and endpoint
+            url = gemini_image_endpoint(api_key)
             
+            # Correct payload format for Gemini Flash Image
             payload = {
-                "instances": [
-                    {
-                        "prompt": prompt
-                    }
-                ],
-                "parameters": {
-                    "sampleCount": 1
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }],
+                "generationConfig": {
+                    "temperature": 1.0,
+                    "maxOutputTokens": 8192
                 }
             }
             
@@ -113,19 +87,18 @@ def generate_image_gemini(prompt: str, timeout: int = 120, retry_delay: float = 
             
             log(f"[DEBUG] Response keys: {list(data.keys())}")
             
-            # Extract image data
-            if 'predictions' in data and data['predictions']:
-                log(f"[DEBUG] Predictions count: {len(data['predictions'])}")
-                pred = data['predictions'][0]
-                if 'bytesBase64Encoded' in pred:
-                    img_data = base64.b64decode(pred['bytesBase64Encoded'])
-                    log(f"[SUCCESS] Tạo ảnh thành công ({len(img_data)} bytes)")
-                    return img_data
-                elif 'image' in pred:
-                    # Handle other response formats
-                    img_data = base64.b64decode(pred['image'])
-                    log(f"[SUCCESS] Tạo ảnh thành công ({len(img_data)} bytes)")
-                    return img_data
+            # Extract image data from Gemini Flash Image response format
+            if 'candidates' in data and data['candidates']:
+                log(f"[DEBUG] Candidates count: {len(data['candidates'])}")
+                candidate = data['candidates'][0]
+                parts = candidate.get('content', {}).get('parts', [])
+                
+                for part in parts:
+                    if 'inlineData' in part:
+                        img_b64 = part['inlineData']['data']
+                        img_data = base64.b64decode(img_b64)
+                        log(f"[SUCCESS] Tạo ảnh thành công ({len(img_data)} bytes)")
+                        return img_data
             
             log(f"[ERROR] No image data in response: {data}")
             raise ImageGenError(f"No image data in response: {data}")
