@@ -5,6 +5,13 @@ Script Worker - Non-blocking script generation using QThread
 from PyQt5.QtCore import QThread, pyqtSignal
 from typing import Dict, Any
 
+# Import services at module level for better error handling
+try:
+    from services import sales_script_service as sscript
+except ImportError as e:
+    sscript = None
+    _import_error = str(e)
+
 
 class ScriptWorker(QThread):
     """Worker thread for generating scripts without blocking the UI"""
@@ -29,10 +36,11 @@ class ScriptWorker(QThread):
     def run(self):
         """Run script generation in background thread"""
         try:
-            self.progress.emit("Bắt đầu tạo kịch bản...")
+            # Check if service import was successful
+            if sscript is None:
+                raise ImportError(f"Failed to import sales_script_service: {_import_error}")
             
-            # Import here to avoid circular dependencies
-            from services import sales_script_service as sscript
+            self.progress.emit("Bắt đầu tạo kịch bản...")
             
             # Generate outline
             outline = sscript.build_outline(self.cfg)

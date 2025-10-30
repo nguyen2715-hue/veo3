@@ -5,6 +5,17 @@ Supports both Gemini and Whisk models
 """
 from PyQt5.QtCore import QThread, pyqtSignal
 from typing import Dict, Any, List
+import tempfile
+import os
+
+# Import services at module level for better error handling
+try:
+    from services import image_gen_service
+    from services import sales_script_service as sscript
+except ImportError as e:
+    image_gen_service = None
+    sscript = None
+    _import_error = str(e)
 
 
 class ImageWorker(QThread):
@@ -41,10 +52,9 @@ class ImageWorker(QThread):
     def run(self):
         """Run image generation in background thread"""
         try:
-            from services import image_gen_service
-            from services import sales_script_service as sscript
-            import tempfile
-            import os
+            # Check if service imports were successful
+            if image_gen_service is None or sscript is None:
+                raise ImportError(f"Failed to import required services: {_import_error}")
             
             # Generate scene images
             scenes = self.outline.get("scenes", [])

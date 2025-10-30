@@ -20,6 +20,8 @@ from services import sales_video_service as svc
 from services.gemini_client import MissingAPIKey
 from ui.widgets.scene_card import SceneCard
 from ui.styles.light_theme import COLORS as LIGHT_COLORS
+# Workers that handle script and image generation in background threads
+# They internally import and use sales_script_service and image_gen_service
 from ui.workers.script_worker import ScriptWorker
 from ui.workers.image_worker import ImageWorker
 
