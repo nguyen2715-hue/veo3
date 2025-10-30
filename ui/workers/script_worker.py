@@ -33,6 +33,7 @@ class ScriptWorker(QThread):
             self.progress.emit("Đang tạo kịch bản...")
             
             from services.sales_script_service import build_outline
+            from services.gemini_client import MissingAPIKey
             
             result = build_outline(self.cfg)
             
@@ -40,4 +41,6 @@ class ScriptWorker(QThread):
             self.done.emit(result)
             
         except Exception as e:
-            self.error.emit(f"Lỗi tạo kịch bản: {str(e)}")
+            # Include exception type name for better error classification
+            error_type = type(e).__name__
+            self.error.emit(f"{error_type}: {str(e)}")

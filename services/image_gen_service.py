@@ -65,7 +65,10 @@ def generate_image_gemini(prompt: str, timeout: int = None, retry_delay: float =
             
             # Handle rate limiting with exponential backoff
             if response.status_code == 429:
-                retry_after = int(response.headers.get('Retry-After', 60))
+                try:
+                    retry_after = int(response.headers.get('Retry-After', 60))
+                except (ValueError, TypeError):
+                    retry_after = 60  # Fallback to 60s if header is invalid
                 log(f"[WARNING] Rate limit 429 on key {key_preview}, waiting {retry_after}s...")
                 time.sleep(retry_after)
                 

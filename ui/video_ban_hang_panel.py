@@ -1061,7 +1061,8 @@ class VideoBanHangPanel(QWidget):
     
     def _on_script_error(self, error_msg):
         """Handle script generation error"""
-        if "MissingAPIKey" in error_msg or "API Key" in error_msg:
+        # Check for MissingAPIKey exception by type name (more robust than string matching)
+        if error_msg.startswith("MissingAPIKey:"):
             QMessageBox.warning(self, "Thiếu API Key", 
                               "Chưa nhập Google API Key trong tab Cài đặt.")
             self._append_log("❌ Thiếu Google API Key")
