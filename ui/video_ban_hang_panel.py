@@ -20,6 +20,8 @@ from services import sales_video_service as svc
 from services import sales_script_service as sscript
 from services import image_gen_service
 from services.gemini_client import MissingAPIKey
+from ui.widgets.scene_card import SceneCard
+from ui.styles.light_theme import COLORS as LIGHT_COLORS
 
 # Fonts
 FONT_LABEL = QFont()
@@ -601,112 +603,46 @@ class VideoBanHangPanel(QWidget):
     def _build_right_column(self, layout):
         """Build right column with results and logs"""
         
-        # Social Media Content (3 tabs)
-        self.social_tabs = QTabWidget()
-        self.social_tabs.setStyleSheet(f"""
+        # Tab widget for results
+        self.results_tabs = QTabWidget()
+        self.results_tabs.setStyleSheet(f"""
             QTabWidget::pane {{
-                border: 1px solid {COLORS['right_border']};
-                background: {COLORS['right_card']};
+                background: {LIGHT_COLORS['background']};
+                border: 1px solid {LIGHT_COLORS['border']};
+                border-radius: 4px;
             }}
             QTabBar::tab {{
-                background: {COLORS['right_card']};
-                color: {COLORS['right_text']};
-                padding: 8px 16px;
-                border: 1px solid {COLORS['right_border']};
+                background: {LIGHT_COLORS['hover']};
+                color: #757575;
+                padding: 10px 20px;
+                margin-right: 4px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                font-size: 13px;
             }}
             QTabBar::tab:selected {{
-                background: {COLORS['right_accent']};
-                color: white;
+                background: {LIGHT_COLORS['background']};
+                color: {LIGHT_COLORS['primary']};
+                border-bottom: 3px solid {LIGHT_COLORS['primary']};
+            }}
+            QTabBar::tab:hover {{
+                background: #EEEEEE;
             }}
         """)
         
-        # Create 3 social version tabs (will be populated dynamically)
-        self.social_version_widgets = []
-        for i in range(3):
-            tab_widget = QWidget()
-            tab_layout = QVBoxLayout(tab_widget)
-            
-            # Caption
-            lbl_caption = QLabel("Caption:")
-            lbl_caption.setStyleSheet(f"color: {COLORS['right_text']}; font-weight: bold;")
-            tab_layout.addWidget(lbl_caption)
-            
-            ed_caption = QTextEdit()
-            ed_caption.setMaximumHeight(100)
-            ed_caption.setStyleSheet(f"background: {COLORS['right_bg']}; color: {COLORS['right_text']};")
-            ed_caption.setReadOnly(True)
-            tab_layout.addWidget(ed_caption)
-            
-            # Copy button
-            btn_copy = QPushButton("📋 Copy")
-            btn_copy.clicked.connect(lambda _, e=ed_caption: self._copy_to_clipboard(e.toPlainText()))
-            tab_layout.addWidget(btn_copy)
-            
-            # Hashtags
-            lbl_hashtags = QLabel("Hashtags:")
-            lbl_hashtags.setStyleSheet(f"color: {COLORS['right_text']}; font-weight: bold;")
-            tab_layout.addWidget(lbl_hashtags)
-            
-            ed_hashtags = QTextEdit()
-            ed_hashtags.setMaximumHeight(60)
-            ed_hashtags.setStyleSheet(f"background: {COLORS['right_bg']}; color: {COLORS['right_text']};")
-            ed_hashtags.setReadOnly(True)
-            tab_layout.addWidget(ed_hashtags)
-            
-            # Thumbnail preview
-            lbl_thumb = QLabel("Thumbnail:")
-            lbl_thumb.setStyleSheet(f"color: {COLORS['right_text']}; font-weight: bold;")
-            tab_layout.addWidget(lbl_thumb)
-            
-            img_thumb = QLabel()
-            img_thumb.setFixedSize(180, 320)  # 9:16 ratio
-            img_thumb.setStyleSheet(f"border: 1px solid {COLORS['right_border']}; background: black;")
-            img_thumb.setAlignment(Qt.AlignCenter)
-            img_thumb.setText("Chưa tạo")
-            tab_layout.addWidget(img_thumb)
-            
-            tab_layout.addStretch(1)
-            
-            self.social_version_widgets.append({
-                'widget': tab_widget,
-                'caption': ed_caption,
-                'hashtags': ed_hashtags,
-                'thumbnail': img_thumb
-            })
-            
-            self.social_tabs.addTab(tab_widget, f"Phiên bản {i+1}")
+        # Tab 1: Scenes (card list)
+        scenes_tab = self._build_scenes_tab()
+        self.results_tabs.addTab(scenes_tab, "🎬 Cảnh")
         
-        layout.addWidget(self.social_tabs, 2)
+        # Tab 2: Thumbnail
+        thumbnail_tab = self._build_thumbnail_tab()
+        self.results_tabs.addTab(thumbnail_tab, "📺 Thumbnail")
         
-        # Scene results
-        gb_scenes = QGroupBox("Kết quả cảnh")
-        gb_scenes.setStyleSheet(f"""
-            QGroupBox {{
-                font-weight: bold;
-                font-size: 14px;
-                color: {COLORS['right_text']};
-                border: 1px solid {COLORS['right_border']};
-                border-radius: 8px;
-                margin-top: 10px;
-                padding: 10px;
-                background: {COLORS['right_card']};
-            }}
-        """)
+        # Tab 3: Social
+        social_tab = self._build_social_tab()
+        self.results_tabs.addTab(social_tab, "📱 Social")
         
-        sv = QVBoxLayout(gb_scenes)
-        self.scenes_area = QScrollArea()
-        self.scenes_area.setWidgetResizable(True)
-        self.scenes_area.setMaximumHeight(300)
-        
-        self.scenes_root = QWidget()
-        self.scenes_layout = QVBoxLayout(self.scenes_root)
-        self.scenes_layout.setContentsMargins(5, 5, 5, 5)
-        self.scenes_layout.setSpacing(8)
-        
-        self.scenes_area.setWidget(self.scenes_root)
-        sv.addWidget(self.scenes_area)
-        
-        layout.addWidget(gb_scenes, 1)
+        layout.addWidget(self.results_tabs, 3)
         
         # Log area
         gb_log = QGroupBox("Nhật ký xử lý")
@@ -803,6 +739,183 @@ class VideoBanHangPanel(QWidget):
         btn_layout.addWidget(self.btn_video)
         
         layout.addLayout(btn_layout)
+    
+    def _build_scenes_tab(self):
+        """Build scenes tab with vertical card list"""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {LIGHT_COLORS['background']}; }}")
+        
+        container = QWidget()
+        self.scenes_layout = QVBoxLayout(container)
+        self.scenes_layout.setContentsMargins(16, 16, 16, 16)
+        self.scenes_layout.setSpacing(0)
+        
+        # Scene cards will be added dynamically
+        self.scene_cards = []
+        
+        self.scenes_layout.addStretch()
+        scroll.setWidget(container)
+        return scroll
+    
+    def _build_thumbnail_tab(self):
+        """Build thumbnail tab"""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {LIGHT_COLORS['background']}; }}")
+        
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        
+        # Create 3 thumbnail version widgets
+        self.thumbnail_widgets = []
+        for i in range(3):
+            # Version card
+            version_card = QFrame()
+            version_card.setStyleSheet(f"""
+                QFrame {{
+                    background: {LIGHT_COLORS['card']};
+                    border: 1px solid {LIGHT_COLORS['border']};
+                    border-radius: 8px;
+                    padding: 16px;
+                }}
+            """)
+            
+            card_layout = QVBoxLayout(version_card)
+            
+            # Title
+            lbl_title = QLabel(f"Phiên bản {i+1}")
+            lbl_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+            lbl_title.setStyleSheet(f"color: {LIGHT_COLORS['primary']};")
+            card_layout.addWidget(lbl_title)
+            
+            # Thumbnail image
+            img_thumb = QLabel()
+            img_thumb.setFixedSize(270, 480)  # 9:16 ratio
+            img_thumb.setStyleSheet(f"""
+                QLabel {{
+                    background: {LIGHT_COLORS['hover']};
+                    border: 1px solid {LIGHT_COLORS['border']};
+                    border-radius: 4px;
+                }}
+            """)
+            img_thumb.setAlignment(Qt.AlignCenter)
+            img_thumb.setText("Chưa tạo")
+            card_layout.addWidget(img_thumb)
+            
+            self.thumbnail_widgets.append({'thumbnail': img_thumb})
+            layout.addWidget(version_card)
+        
+        layout.addStretch()
+        scroll.setWidget(container)
+        return scroll
+    
+    def _build_social_tab(self):
+        """Build social media tab"""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {LIGHT_COLORS['background']}; }}")
+        
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        
+        # Create 3 social version widgets
+        self.social_version_widgets = []
+        for i in range(3):
+            # Version card
+            version_card = QFrame()
+            version_card.setStyleSheet(f"""
+                QFrame {{
+                    background: {LIGHT_COLORS['card']};
+                    border: 1px solid {LIGHT_COLORS['border']};
+                    border-radius: 8px;
+                    padding: 16px;
+                }}
+            """)
+            
+            card_layout = QVBoxLayout(version_card)
+            
+            # Title
+            lbl_title = QLabel(f"Phiên bản {i+1}")
+            lbl_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+            lbl_title.setStyleSheet(f"color: {LIGHT_COLORS['primary']};")
+            card_layout.addWidget(lbl_title)
+            
+            # Caption
+            lbl_caption = QLabel("Caption:")
+            lbl_caption.setFont(QFont("Segoe UI", 12, QFont.Bold))
+            lbl_caption.setStyleSheet(f"color: {LIGHT_COLORS['text_secondary']};")
+            card_layout.addWidget(lbl_caption)
+            
+            ed_caption = QTextEdit()
+            ed_caption.setMaximumHeight(100)
+            ed_caption.setStyleSheet(f"""
+                QTextEdit {{
+                    background: {LIGHT_COLORS['hover']};
+                    color: {LIGHT_COLORS['text_primary']};
+                    border: 1px solid {LIGHT_COLORS['border']};
+                    border-radius: 4px;
+                    padding: 8px;
+                }}
+            """)
+            ed_caption.setReadOnly(True)
+            card_layout.addWidget(ed_caption)
+            
+            # Copy button
+            btn_copy = QPushButton("📋 Copy Caption")
+            btn_copy.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    border: 1px solid {LIGHT_COLORS['divider']};
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    color: {LIGHT_COLORS['text_secondary']};
+                    font-size: 11px;
+                }}
+                QPushButton:hover {{
+                    background: {LIGHT_COLORS['hover']};
+                    border-color: {LIGHT_COLORS['primary']};
+                    color: {LIGHT_COLORS['primary']};
+                }}
+            """)
+            btn_copy.clicked.connect(lambda _, e=ed_caption: self._copy_to_clipboard(e.toPlainText()))
+            card_layout.addWidget(btn_copy)
+            
+            # Hashtags
+            lbl_hashtags = QLabel("Hashtags:")
+            lbl_hashtags.setFont(QFont("Segoe UI", 12, QFont.Bold))
+            lbl_hashtags.setStyleSheet(f"color: {LIGHT_COLORS['text_secondary']};")
+            card_layout.addWidget(lbl_hashtags)
+            
+            ed_hashtags = QTextEdit()
+            ed_hashtags.setMaximumHeight(60)
+            ed_hashtags.setStyleSheet(f"""
+                QTextEdit {{
+                    background: {LIGHT_COLORS['hover']};
+                    color: {LIGHT_COLORS['text_primary']};
+                    border: 1px solid {LIGHT_COLORS['border']};
+                    border-radius: 4px;
+                    padding: 8px;
+                }}
+            """)
+            ed_hashtags.setReadOnly(True)
+            card_layout.addWidget(ed_hashtags)
+            
+            self.social_version_widgets.append({
+                'widget': version_card,
+                'caption': ed_caption,
+                'hashtags': ed_hashtags
+            })
+            
+            layout.addWidget(version_card)
+        
+        layout.addStretch()
+        scroll.setWidget(container)
+        return scroll
     
     def _create_group(self, title):
         """Create a styled group box"""
@@ -993,23 +1106,28 @@ class VideoBanHangPanel(QWidget):
     
     def _display_scene_cards(self, scenes):
         """Display scene cards in the results area"""
-        # Clear existing
-        while self.scenes_layout.count():
+        # Clear existing cards (but keep the stretch)
+        while self.scenes_layout.count() > 1:
             item = self.scenes_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         
-        # Create cards using SceneCardWidget
-        for scene in scenes:
-            card = SceneCardWidget(scene)
-            self.scenes_layout.addWidget(card)
-            
-            # Store reference to the card and its image label
-            scene_idx = scene.get('index')
-            if scene_idx:
-                self.scene_images[scene_idx] = {'card': card, 'label': card.image_label, 'path': None}
+        # Reset scene_cards list
+        self.scene_cards = []
+        self.scene_images = {}
         
-        self.scenes_layout.addStretch(1)
+        # Create cards using new SceneCard widget
+        for i, scene in enumerate(scenes):
+            # Get scene index (1-based in data)
+            scene_idx = scene.get('index', i + 1)
+            
+            # Create new SceneCard (0-based index for display)
+            card = SceneCard(i, scene)
+            self.scenes_layout.insertWidget(i, card)
+            
+            # Store references
+            self.scene_cards.append(card)
+            self.scene_images[scene_idx] = {'card': card, 'label': card.img_preview, 'path': None}
     
     def _on_generate_images(self):
         """Step 2: Generate images for scenes and thumbnails"""
@@ -1053,7 +1171,7 @@ class VideoBanHangPanel(QWidget):
             card = self.scene_images[scene_idx].get('card')
             if card:
                 pixmap = QPixmap(str(img_path))
-                card.set_image(pixmap)
+                card.set_image_pixmap(pixmap)
             self.scene_images[scene_idx]['path'] = str(img_path)
         
         self._append_log(f"✓ Ảnh cảnh {scene_idx} đã sẵn sàng")
@@ -1068,14 +1186,20 @@ class VideoBanHangPanel(QWidget):
         with open(img_path, 'wb') as f:
             f.write(img_data)
         
-        # Update UI
-        if version_idx < len(self.social_version_widgets):
-            widget_data = self.social_version_widgets[version_idx]
+        # Update UI - thumbnail tab
+        if version_idx < len(self.thumbnail_widgets):
+            widget_data = self.thumbnail_widgets[version_idx]
             pixmap = QPixmap(str(img_path))
             widget_data['thumbnail'].setPixmap(
-                pixmap.scaled(180, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap.scaled(270, 480, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
-            widget_data['thumbnail'].setStyleSheet(f"border: 1px solid {COLORS['right_border']};")
+            widget_data['thumbnail'].setStyleSheet(f"""
+                QLabel {{
+                    background: {LIGHT_COLORS['hover']};
+                    border: 1px solid {LIGHT_COLORS['border']};
+                    border-radius: 4px;
+                }}
+            """)
         
         self._append_log(f"✓ Thumbnail phiên bản {version_idx+1} đã sẵn sàng")
     
