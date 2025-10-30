@@ -33,7 +33,6 @@ class ScriptWorker(QThread):
             self.progress.emit("Đang tạo kịch bản...")
             
             from services.sales_script_service import build_outline
-            from services.gemini_client import MissingAPIKey
             
             result = build_outline(self.cfg)
             
