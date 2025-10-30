@@ -17,11 +17,11 @@ import time
 from pathlib import Path
 
 from services import sales_video_service as svc
-from services import sales_script_service as sscript
-from services import image_gen_service
 from services.gemini_client import MissingAPIKey
 from ui.widgets.scene_card import SceneCard
 from ui.styles.light_theme import COLORS as LIGHT_COLORS
+from ui.workers.script_worker import ScriptWorker
+from ui.workers.image_worker import ImageWorker
 
 # Fonts
 FONT_LABEL = QFont()
@@ -251,135 +251,7 @@ class SceneCardWidget(QFrame):
             self.image_label.setStyleSheet(f"border: 1px solid {COLORS['right_border']}; background: black;")
 
 
-class ImageGenerationWorker(QThread):
-    """Worker thread for generating images (scenes + thumbnails)"""
-    progress = pyqtSignal(str)  # Log message
-    scene_image_ready = pyqtSignal(int, bytes)  # scene_index, image_data
-    thumbnail_ready = pyqtSignal(int, bytes)  # version_index, image_data
-    finished = pyqtSignal(bool)  # success
-    
-    def __init__(self, outline, cfg, model_paths, prod_paths, use_whisk=False):
-        super().__init__()
-        self.outline = outline
-        self.cfg = cfg
-        self.model_paths = model_paths
-        self.prod_paths = prod_paths
-        self.use_whisk = use_whisk
-        self.should_stop = False
-    
-    def run(self):
-        try:
-            # Generate scene images
-            scenes = self.outline.get("scenes", [])
-            for i, scene in enumerate(scenes):
-                if self.should_stop:
-                    break
-                    
-                self.progress.emit(f"Tạo ảnh cảnh {scene.get('index')}...")
-                
-                # Get prompt
-                prompt = scene.get("prompt_image", "")
-                
-                # Try to generate image
-                img_data = None
-                if self.use_whisk and self.model_paths and self.prod_paths:
-                    # Try Whisk first
-                    try:
-                        from services import whisk_service
-                        img_data = whisk_service.generate_image(
-                            prompt=prompt,
-                            model_image=self.model_paths[0] if self.model_paths else None,
-                            product_image=self.prod_paths[0] if self.prod_paths else None
-                        )
-                        self.progress.emit(f"Cảnh {scene.get('index')}: Dùng Whisk ✓")
-                    except Exception as e:
-                        self.progress.emit(f"Whisk failed: {e}, fallback to Gemini...")
-                        img_data = None
-                
-                # Fallback to Gemini or if Whisk not enabled
-                if img_data is None:
-                    try:
-                        # Use Gemini image generation with rate limiting and debug logging
-                        delay = 2.5 if i > 0 else 0
-                        self.progress.emit(f"Cảnh {scene.get('index')}: Dùng Gemini...")
-                        
-                        # Pass log callback for enhanced debug output
-                        img_data = image_gen_service.generate_image_with_rate_limit(
-                            prompt, 
-                            delay, 
-                            log_callback=lambda msg: self.progress.emit(msg)
-                        )
-                        
-                        if img_data:
-                            self.progress.emit(f"Cảnh {scene.get('index')}: Gemini ✓")
-                        else:
-                            self.progress.emit(f"Cảnh {scene.get('index')}: Không tạo được ảnh")
-                    except Exception as e:
-                        self.progress.emit(f"Gemini failed for scene {scene.get('index')}: {e}")
-                
-                if img_data:
-                    self.scene_image_ready.emit(scene.get('index'), img_data)
-            
-            # Generate social media thumbnails
-            social_media = self.outline.get("social_media", {})
-            versions = social_media.get("versions", [])
-            
-            for i, version in enumerate(versions):
-                if self.should_stop:
-                    break
-                    
-                self.progress.emit(f"Tạo thumbnail phiên bản {i+1}...")
-                
-                prompt = version.get("thumbnail_prompt", "")
-                text_overlay = version.get("thumbnail_text_overlay", "")
-                
-                # Generate base thumbnail image
-                try:
-                    # Rate limit: 2.5s delay
-                    delay = 2.5 if (len(scenes) + i) > 0 else 0
-                    thumb_data = image_gen_service.generate_image_with_rate_limit(
-                        prompt, 
-                        delay,
-                        log_callback=lambda msg: self.progress.emit(msg)
-                    )
-                    
-                    if thumb_data:
-                        # Save temp image for text overlay
-                        import tempfile
-                        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                            tmp.write(thumb_data)
-                            tmp_path = tmp.name
-                        
-                        # Add text overlay
-                        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_out:
-                            out_path = tmp_out.name
-                        
-                        sscript.generate_thumbnail_with_text(tmp_path, text_overlay, out_path)
-                        
-                        # Read final image
-                        with open(out_path, 'rb') as f:
-                            final_thumb = f.read()
-                        
-                        # Clean up temp files
-                        os.unlink(tmp_path)
-                        os.unlink(out_path)
-                        
-                        self.thumbnail_ready.emit(i, final_thumb)
-                        self.progress.emit(f"Thumbnail {i+1}: ✓")
-                    else:
-                        self.progress.emit(f"Thumbnail {i+1}: Không tạo được")
-                        
-                except Exception as e:
-                    self.progress.emit(f"Thumbnail {i+1} lỗi: {e}")
-                
-            self.finished.emit(True)
-            
-        except Exception as e:
-            self.progress.emit(f"Lỗi: {e}")
-            self.finished.emit(False)
-    
-    def stop(self):
-        self.should_stop = True
+# ImageGenerationWorker moved to ui/workers/image_worker.py
 
 
 class VideoBanHangPanel(QWidget):
@@ -1058,15 +930,33 @@ class VideoBanHangPanel(QWidget):
         self._append_log("Đã copy vào clipboard")
     
     def _on_write_script(self):
-        """Step 1: Write script and generate social media content"""
+        """Step 1: Write script and generate social media content (non-blocking)"""
         cfg = self._collect_cfg()
         
         self._append_log("Bắt đầu tạo kịch bản...")
         self.btn_script.setEnabled(False)
         
         try:
-            # Generate outline with social media content
-            outline = sscript.build_outline(cfg)
+            # Create and start script worker
+            self.script_worker = ScriptWorker(cfg)
+            self.script_worker.progress.connect(self._append_log)
+            self.script_worker.finished.connect(self._on_script_finished)
+            self.script_worker.error.connect(self._on_script_error)
+            self.script_worker.start()
+            
+        except MissingAPIKey:
+            QMessageBox.warning(self, "Thiếu API Key", 
+                              "Chưa nhập Google API Key trong tab Cài đặt.")
+            self._append_log("❌ Thiếu Google API Key")
+            self.btn_script.setEnabled(True)
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", str(e))
+            self._append_log(f"❌ Lỗi: {e}")
+            self.btn_script.setEnabled(True)
+    
+    def _on_script_finished(self, outline):
+        """Handle script generation completion"""
+        try:
             self.last_outline = outline
             
             # Display social media versions
@@ -1094,15 +984,15 @@ class VideoBanHangPanel(QWidget):
             # Enable next button
             self.btn_images.setEnabled(True)
             
-        except MissingAPIKey:
-            QMessageBox.warning(self, "Thiếu API Key", 
-                              "Chưa nhập Google API Key trong tab Cài đặt.")
-            self._append_log("❌ Thiếu Google API Key")
         except Exception as e:
-            QMessageBox.critical(self, "Lỗi", str(e))
-            self._append_log(f"❌ Lỗi: {e}")
+            self._append_log(f"❌ Lỗi hiển thị: {e}")
         finally:
             self.btn_script.setEnabled(True)
+    
+    def _on_script_error(self, error_msg):
+        """Handle script generation error"""
+        QMessageBox.critical(self, "Lỗi", error_msg)
+        self.btn_script.setEnabled(True)
     
     def _display_scene_cards(self, scenes):
         """Display scene cards in the results area"""
@@ -1130,7 +1020,7 @@ class VideoBanHangPanel(QWidget):
             self.scene_images[scene_idx] = {'card': card, 'label': card.img_preview, 'path': None}
     
     def _on_generate_images(self):
-        """Step 2: Generate images for scenes and thumbnails"""
+        """Step 2: Generate images for scenes and thumbnails (non-blocking)"""
         if not self.last_outline:
             QMessageBox.warning(self, "Chưa có kịch bản", 
                               "Vui lòng viết kịch bản trước.")
@@ -1143,7 +1033,7 @@ class VideoBanHangPanel(QWidget):
         self.btn_images.setEnabled(False)
         
         # Create worker thread
-        self.img_worker = ImageGenerationWorker(
+        self.img_worker = ImageWorker(
             self.last_outline, cfg, 
             self.model_rows, self.prod_paths,
             use_whisk

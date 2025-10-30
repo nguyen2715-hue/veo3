@@ -70,18 +70,23 @@ def generate_image_gemini(prompt: str, timeout: int = 120, retry_delay: float = 
             key_preview = f"...{api_key[-6:]}" if len(api_key) > 6 else "***"
             log(f"[INFO] Key {key_preview} (lần {key_idx + 1})")
             
-            # Gemini Imagen endpoint (simplified - may need adjustment)
-            # Using the generateImages endpoint from Vertex AI or similar
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key={api_key}"
+            # Gemini image generation endpoint with correct model
+            # Using gemini-2.5-flash-image model
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key={api_key}"
             
             payload = {
-                "instances": [
+                "contents": [
                     {
-                        "prompt": prompt
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": prompt
+                            }
+                        ]
                     }
                 ],
-                "parameters": {
-                    "sampleCount": 1
+                "generationConfig": {
+                    "responseModalities": ["image"]
                 }
             }
             
@@ -113,19 +118,22 @@ def generate_image_gemini(prompt: str, timeout: int = 120, retry_delay: float = 
             
             log(f"[DEBUG] Response keys: {list(data.keys())}")
             
-            # Extract image data
-            if 'predictions' in data and data['predictions']:
-                log(f"[DEBUG] Predictions count: {len(data['predictions'])}")
-                pred = data['predictions'][0]
-                if 'bytesBase64Encoded' in pred:
-                    img_data = base64.b64decode(pred['bytesBase64Encoded'])
-                    log(f"[SUCCESS] Tạo ảnh thành công ({len(img_data)} bytes)")
-                    return img_data
-                elif 'image' in pred:
-                    # Handle other response formats
-                    img_data = base64.b64decode(pred['image'])
-                    log(f"[SUCCESS] Tạo ảnh thành công ({len(img_data)} bytes)")
-                    return img_data
+            # Extract image data from Gemini generateContent response
+            if 'candidates' in data and data['candidates']:
+                log(f"[DEBUG] Candidates count: {len(data['candidates'])}")
+                candidate = data['candidates'][0]
+                
+                # Check for inline data in parts
+                content = candidate.get('content', {})
+                parts = content.get('parts', [])
+                
+                for part in parts:
+                    if 'inlineData' in part:
+                        inline_data = part['inlineData']
+                        if 'data' in inline_data:
+                            img_data = base64.b64decode(inline_data['data'])
+                            log(f"[SUCCESS] Tạo ảnh thành công ({len(img_data)} bytes)")
+                            return img_data
             
             log(f"[ERROR] No image data in response: {data}")
             raise ImageGenError(f"No image data in response: {data}")

@@ -6,6 +6,7 @@ Correct 3-step workflow from real browser traffic analysis
 import requests
 import base64
 import uuid
+import time
 from typing import Dict, Any, List, Optional
 
 
@@ -102,6 +103,7 @@ class WhiskClient:
         image_b64 = base64.b64encode(image_data).decode('utf-8')
         
         # Determine mime type
+        from pathlib import Path
         ext = Path(image_path).suffix.lower()
         mime_map = {
             '.jpg': 'image/jpeg',
