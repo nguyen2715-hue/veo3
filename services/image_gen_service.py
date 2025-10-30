@@ -63,12 +63,14 @@ def generate_image_gemini(prompt: str, timeout: int = None, retry_delay: float =
             
             log(f"[DEBUG] HTTP {response.status_code}")
             
-            # Handle rate limiting
+            # Handle rate limiting with exponential backoff
             if response.status_code == 429:
-                log(f"[WARNING] Rate limit 429 on key {key_preview}")
+                retry_after = int(response.headers.get('Retry-After', 60))
+                log(f"[WARNING] Rate limit 429 on key {key_preview}, waiting {retry_after}s...")
+                time.sleep(retry_after)
+                
                 if key_idx < len(keys) - 1:
-                    # Try next key after delay
-                    time.sleep(retry_delay)
+                    # Try next key
                     continue
                 else:
                     raise ImageGenError("Rate limit exceeded on all keys")
@@ -115,13 +117,13 @@ def generate_image_gemini(prompt: str, timeout: int = None, retry_delay: float =
     raise ImageGenError("Image generation failed with all keys")
 
 
-def generate_image_with_rate_limit(prompt: str, delay: float = 2.5, log_callback=None) -> Optional[bytes]:
+def generate_image_with_rate_limit(prompt: str, delay: float = 5.0, log_callback=None) -> Optional[bytes]:
     """
     Generate image with automatic rate limiting delay
     
     Args:
         prompt: Text prompt
-        delay: Delay in seconds before generation (to avoid rate limits)
+        delay: Delay in seconds before generation (default 5.0s for 15 req/min limit)
         log_callback: Optional callback function for logging
         
     Returns:
@@ -132,6 +134,17 @@ def generate_image_with_rate_limit(prompt: str, delay: float = 2.5, log_callback
     try:
         return generate_image_gemini(prompt, log_callback=log_callback)
     except Exception as e:
+        # Check if rate limited
+        if '429' in str(e) or 'rate limit' in str(e).lower():
+            if log_callback:
+                log_callback(f"[WARNING] Rate limited, waiting 60s...")
+            time.sleep(60)  # Wait 1 minute before retry
+            try:
+                return generate_image_gemini(prompt, log_callback=log_callback)
+            except Exception as retry_error:
+                if log_callback:
+                    log_callback(f"[ERROR] Retry failed: {str(retry_error)[:100]}")
+                return None
         if log_callback:
             log_callback(f"[ERROR] Generation failed: {str(e)[:100]}")
         return None

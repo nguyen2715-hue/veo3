@@ -22,6 +22,7 @@ from services import image_gen_service
 from services.gemini_client import MissingAPIKey
 from ui.widgets.scene_card import SceneCard
 from ui.styles.light_theme import COLORS as LIGHT_COLORS
+from ui.workers.script_worker import ScriptWorker
 
 # Fonts
 FONT_LABEL = QFont()
@@ -674,63 +675,15 @@ class VideoBanHangPanel(QWidget):
         
         self.btn_script = QPushButton("📝 Viết kịch bản")
         self.btn_script.setMinimumHeight(40)
-        self.btn_script.setStyleSheet("""
-            QPushButton {
-                background: #1976D2;
-                color: white;
-                border-radius: 8px;
-                padding: 10px 16px;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background: #1565C0;
-            }
-            QPushButton:disabled {
-                background: #666;
-            }
-        """)
         self.btn_script.clicked.connect(self._on_write_script)
         
         self.btn_images = QPushButton("🎨 Tạo ảnh")
         self.btn_images.setMinimumHeight(40)
-        self.btn_images.setStyleSheet("""
-            QPushButton {
-                background: #26A69A;
-                color: white;
-                border-radius: 8px;
-                padding: 10px 16px;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background: #1E8E7E;
-            }
-            QPushButton:disabled {
-                background: #666;
-            }
-        """)
         self.btn_images.clicked.connect(self._on_generate_images)
         self.btn_images.setEnabled(False)
         
         self.btn_video = QPushButton("🎬 Tạo video")
         self.btn_video.setMinimumHeight(40)
-        self.btn_video.setStyleSheet("""
-            QPushButton {
-                background: #0E7C66;
-                color: white;
-                border-radius: 8px;
-                padding: 10px 16px;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background: #0C6B58;
-            }
-            QPushButton:disabled {
-                background: #666;
-            }
-        """)
         self.btn_video.clicked.connect(self._on_generate_video)
         self.btn_video.setEnabled(False)
         
@@ -1058,15 +1011,22 @@ class VideoBanHangPanel(QWidget):
         self._append_log("Đã copy vào clipboard")
     
     def _on_write_script(self):
-        """Step 1: Write script and generate social media content"""
+        """Step 1: Write script and generate social media content (NON-BLOCKING)"""
         cfg = self._collect_cfg()
         
         self._append_log("Bắt đầu tạo kịch bản...")
         self.btn_script.setEnabled(False)
         
+        # Use worker thread for non-blocking script generation
+        self.script_worker = ScriptWorker(cfg)
+        self.script_worker.progress.connect(self._append_log)
+        self.script_worker.done.connect(self._on_script_done)
+        self.script_worker.error.connect(self._on_script_error)
+        self.script_worker.start()
+    
+    def _on_script_done(self, outline):
+        """Handle script generation complete"""
         try:
-            # Generate outline with social media content
-            outline = sscript.build_outline(cfg)
             self.last_outline = outline
             
             # Display social media versions
@@ -1094,15 +1054,21 @@ class VideoBanHangPanel(QWidget):
             # Enable next button
             self.btn_images.setEnabled(True)
             
-        except MissingAPIKey:
+        except Exception as e:
+            self._append_log(f"❌ Lỗi hiển thị: {e}")
+        finally:
+            self.btn_script.setEnabled(True)
+    
+    def _on_script_error(self, error_msg):
+        """Handle script generation error"""
+        if "MissingAPIKey" in error_msg or "API Key" in error_msg:
             QMessageBox.warning(self, "Thiếu API Key", 
                               "Chưa nhập Google API Key trong tab Cài đặt.")
             self._append_log("❌ Thiếu Google API Key")
-        except Exception as e:
-            QMessageBox.critical(self, "Lỗi", str(e))
-            self._append_log(f"❌ Lỗi: {e}")
-        finally:
-            self.btn_script.setEnabled(True)
+        else:
+            QMessageBox.critical(self, "Lỗi", error_msg)
+            self._append_log(f"❌ Lỗi: {error_msg}")
+        self.btn_script.setEnabled(True)
     
     def _display_scene_cards(self, scenes):
         """Display scene cards in the results area"""

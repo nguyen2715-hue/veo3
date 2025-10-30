@@ -16,18 +16,16 @@ class ScriptWorker(QThread):
     done = pyqtSignal(dict)     # Result data
     error = pyqtSignal(str)     # Error messages
     
-    def __init__(self, product: str, duration: int, parent=None):
+    def __init__(self, cfg: dict, parent=None):
         """
         Initialize script worker
         
         Args:
-            product: Product name/description
-            duration: Video duration in seconds
+            cfg: Configuration dictionary with all settings
             parent: Parent QObject
         """
         super().__init__(parent)
-        self.product = product
-        self.duration = duration
+        self.cfg = cfg
     
     def run(self):
         """Execute script generation in background thread"""
@@ -36,10 +34,7 @@ class ScriptWorker(QThread):
             
             from services.sales_script_service import build_outline
             
-            result = build_outline({
-                'product_main': self.product,
-                'duration_sec': self.duration
-            })
+            result = build_outline(self.cfg)
             
             self.progress.emit("Hoàn thành!")
             self.done.emit(result)
