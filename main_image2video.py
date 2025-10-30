@@ -135,7 +135,16 @@ class MainWindow(QTabWidget):
             print("Ads tab error:", e)
 
 def main():
-    app=QApplication(sys.argv); w=MainWindow(); w.show(); sys.exit(app.exec_())
+    app=QApplication(sys.argv)
+    
+    # Apply Material Design styling
+    try:
+        from ui.styles.material_stylesheet import apply_material_design
+        apply_material_design(app)
+    except Exception as e:
+        print(f"Warning: Could not apply Material Design: {e}")
+    
+    w=MainWindow(); w.show(); sys.exit(app.exec_())
 
 if __name__=='__main__':
     main()

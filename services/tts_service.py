@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 import os, base64, json, requests, re
 from typing import List, Tuple
-def _cfg():
-    try:
-        from utils import config as cfg
-        return cfg.load() if hasattr(cfg, "load") else {}
-    except Exception:
-        return {}
+from services.core.config import load as load_config
+from services.core.key_manager import refresh, rotated_list
+
 def _tokens_of(kinds:Tuple[str,...])->List[str]:
-    from services.keys_manager import refresh, rotated_list
-    out=[]; c=_cfg(); refresh()
+    out=[]; c=load_config(); refresh()
     # New structured lists
     if "elevenlabs" in kinds:
         out += [k for k in (c.get("elevenlabs_api_keys") or []) if k]

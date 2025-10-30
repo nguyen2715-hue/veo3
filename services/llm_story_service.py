@@ -1,22 +1,11 @@
 
 import os, json, requests
+from services.core.key_manager import get_key
 
 def _load_keys():
-    gk = os.getenv("GOOGLE_API_KEY") or ""
-    ok = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_APIKEY") or ""
-    try:
-        from utils import config as cfg
-        st = cfg.load() if hasattr(cfg, "load") else {}
-        gk = st.get("google_api_key", gk)
-        ok = st.get("openai_api_key", ok) or st.get("openai", ok)
-    except Exception:
-        try:
-            import config as cfg2
-            st = cfg2.load() if hasattr(cfg2, "load") else {}
-            gk = st.get("google_api_key", gk)
-            ok = st.get("openai_api_key", ok)
-        except Exception:
-            pass
+    """Load keys using unified key manager"""
+    gk = get_key('google')
+    ok = get_key('openai')
     return gk, ok
 
 def _n_scenes(total_seconds:int):
@@ -106,26 +95,19 @@ def _call_openai(prompt, api_key, model="gpt-5"):
         "response_format":{"type":"json_object"},
         "temperature":0.9
     }
-
-    c=_cfg(); refresh()
-    _gk = rotated_list('google', ([c.get('google_api_key')] if c.get('google_api_key') else []) + (c.get('google_api_keys') or []))
-    key = _gk[0] if _gk else ''
-    requests.post(url,headers=headers,json=data,timeout=240); r.raise_for_status()
+    r=requests.post(url,headers=headers,json=data,timeout=240); r.raise_for_status()
     txt=r.json()["choices"][0]["message"]["content"]
     return json.loads(txt)
 
 def _call_gemini(prompt, api_key, model="gemini-2.5-flash"):
-    url=f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    from services.core.api_config import gemini_text_endpoint
+    url=gemini_text_endpoint(api_key) if model == "gemini-2.5-flash" else f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     headers={"Content-Type":"application/json"}
     data={
         "contents":[{"role":"user","parts":[{"text":prompt}]}],
         "generationConfig":{"temperature":0.9,"response_mime_type":"application/json"}
     }
-
-    c=_cfg(); refresh()
-    _gk = rotated_list('google', ([c.get('google_api_key')] if c.get('google_api_key') else []) + (c.get('google_api_keys') or []))
-    key = _gk[0] if _gk else ''
-    requests.post(url,headers=headers,json=data,timeout=240); r.raise_for_status()
+    r=requests.post(url,headers=headers,json=data,timeout=240); r.raise_for_status()
     out=r.json()
     txt=out["candidates"][0]["content"]["parts"][0]["text"]
     return json.loads(txt)

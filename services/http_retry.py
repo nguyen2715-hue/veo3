@@ -19,15 +19,9 @@ except Exception:
     RESILIENCE_OVERRIDES = {}
 
 
-def _cfg():
-    try:
-        from utils import config as cfg
-        return cfg.load() if hasattr(cfg,'load') else {}
-    except Exception:
-        return {}
-
 def _knob(name:str, default):
-    c = _cfg()
+    from services.core.config import load as load_config
+    c = load_config()
     return c.get('resilience', {}).get(name, default)
 
 RETRY_STATUS = {429, 500, 502, 503, 504}
