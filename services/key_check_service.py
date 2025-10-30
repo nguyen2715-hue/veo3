@@ -2,6 +2,9 @@
 import requests, datetime
 from typing import Tuple
 
+# Constants
+MIN_JWT_TOKEN_LENGTH = 50  # Minimum expected length for JWT session tokens
+
 def _ts(): return datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
 def _fmt_err(prefix, r):
@@ -42,7 +45,7 @@ def check(kind: str, key: str) -> Tuple[bool, str]:
         if kind in ('session', 'whisk_session'):
             # Session tokens are cookie-based, harder to validate without full context
             # Just check if it looks like a valid JWT token
-            if k and len(k) > 50 and '.' in k:
+            if k and len(k) > MIN_JWT_TOKEN_LENGTH and '.' in k:
                 return True, f'Format OK (not fully validated) @ {_ts()}'
             return False, f'Invalid format @ {_ts()}'
     except Exception as e:

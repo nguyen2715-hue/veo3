@@ -16,6 +16,11 @@ from pathlib import Path
 WHISK_UPLOAD_ENDPOINT = "https://labs.google/fx/api/trpc/backbone.uploadImage"
 WHISK_RECIPE_ENDPOINT = "https://aisandbox-pa.googleapis.com/v1/whisk:runImageRecipe"
 
+# Constants
+MAX_REFERENCE_IMAGES = 3  # Whisk supports up to 3 reference images
+IMAGE_DOWNLOAD_TIMEOUT = 30  # Timeout for downloading generated image
+DEFAULT_GENERATION_TIMEOUT = 90  # Default timeout for image generation
+
 
 class WhiskError(Exception):
     """Base exception for Whisk service errors"""
@@ -158,7 +163,7 @@ class WhiskClient:
         workflow_id: str, 
         session_id: str,
         aspect_ratio: str = "9:16",
-        timeout: int = 90
+        timeout: int = DEFAULT_GENERATION_TIMEOUT
     ) -> Optional[Dict[str, Any]]:
         """
         Step 2: Generate with OAuth Token using uploaded media IDs
@@ -269,6 +274,7 @@ class WhiskClient:
         
         # Generate workflow ID and session ID
         workflow_id = str(uuid.uuid4())
+        # Session ID format from real traffic: semicolon followed by timestamp in milliseconds
         session_id = f";{int(time.time() * 1000)}"
         
         log(f"[INFO] Step 1/3: Uploading reference images...")
@@ -276,7 +282,7 @@ class WhiskClient:
         # Step 1: Upload all reference images
         media_ids = []
         if reference_images:
-            for i, img_path in enumerate(reference_images[:3]):  # Limit to 3 images
+            for i, img_path in enumerate(reference_images[:MAX_REFERENCE_IMAGES]):
                 try:
                     log(f"[DEBUG] Uploading {Path(img_path).name}...")
                     media_id = self.upload_image(img_path, workflow_id, session_id)
@@ -345,7 +351,7 @@ def generate_image(
         
         # Step 3: Download image
         if result and result.get("imageUrl"):
-            img_response = requests.get(result["imageUrl"], timeout=30)
+            img_response = requests.get(result["imageUrl"], timeout=IMAGE_DOWNLOAD_TIMEOUT)
             img_response.raise_for_status()
             return img_response.content
         
