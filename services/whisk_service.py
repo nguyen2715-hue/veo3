@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Whisk Service - Google Labs Image Remix API integration
-Correct endpoints from real browser traffic
+Whisk Service - Simplified OAuth-only implementation
+Based on real Google Labs browser traffic analysis
 """
 import requests
-import time
-import json
 import base64
+import os
 from typing import Dict, Any, List, Optional
-from pathlib import Path
 
 
-# Correct Whisk API endpoints
-WHISK_UPLOAD_ENDPOINT = "https://labs.google/fx/api/trpc/backbone.uploadImage"
+# Whisk API endpoint (OAuth-only, no upload needed)
 WHISK_RECIPE_ENDPOINT = "https://aisandbox-pa.googleapis.com/v1/whisk:runImageRecipe"
 
 
@@ -22,204 +19,187 @@ class WhiskError(Exception):
 
 
 class WhiskClient:
-    """Whisk API client with correct endpoints and authentication"""
+    """Simplified Whisk client using only OAuth token"""
     
-    def __init__(self, session_tokens: Optional[List[str]] = None, oauth_tokens: Optional[List[str]] = None):
+    def __init__(self, oauth_tokens: Optional[List[str]] = None):
         """
         Initialize Whisk client
         
         Args:
-            session_tokens: List of session tokens from cookies (__Secure-next-auth.session-token)
-            oauth_tokens: List of OAuth tokens from Authorization headers (ya29...)
+            oauth_tokens: OAuth tokens from "Google Labs Token" field in Settings
+                         (saved as 'labs_tokens' or 'tokens' in config)
         """
-        self.session_tokens = session_tokens or []
         self.oauth_tokens = oauth_tokens or []
+        self._current_token_index = 0
     
-    def _get_session_token(self) -> Optional[str]:
-        """Get session token from config or init"""
-        if self.session_tokens:
-            return self.session_tokens[0]
+    def _get_next_token(self) -> Optional[str]:
+        """Get next OAuth token from list (with rotation)"""
+        if not self.oauth_tokens:
+            # Try to load from config if not provided in init
+            try:
+                from utils import config as cfg
+                st = cfg.load() or {}
+                # Check both 'labs_tokens' and 'tokens' (Settings saves to both)
+                self.oauth_tokens = st.get("labs_tokens") or st.get("tokens") or []
+            except Exception:
+                pass
         
-        try:
-            from utils import config as cfg
-            st = cfg.load() or {}
-            tokens = st.get("tokens") or []
-            if isinstance(tokens, list) and tokens:
-                return tokens[0]
-        except Exception:
-            pass
+        if not self.oauth_tokens:
+            return None
         
-        return None
-    
-    def _get_oauth_token(self) -> Optional[str]:
-        """Get OAuth token from config or init"""
-        if self.oauth_tokens:
-            return self.oauth_tokens[0]
-        
-        try:
-            from utils import config as cfg
-            st = cfg.load() or {}
-            oauth_tokens = st.get("oauth_tokens") or []
-            if isinstance(oauth_tokens, list) and oauth_tokens:
-                return oauth_tokens[0]
-        except Exception:
-            pass
-        
-        return None
-    
-    def upload_image(self, image_path: str) -> str:
-        """
-        Upload an image file to Whisk upload endpoint
-        
-        Args:
-            image_path: Path to the image file
-            
-        Returns:
-            Upload ID/token for use in recipe
-            
-        Raises:
-            WhiskError: If upload fails
-        """
-        session_token = self._get_session_token()
-        if not session_token:
-            raise WhiskError("No session token available for Whisk upload")
-        
-        # Read image file
-        try:
-            with open(image_path, 'rb') as f:
-                image_data = f.read()
-        except Exception as e:
-            raise WhiskError(f"Failed to read image file: {e}")
-        
-        # Encode to base64
-        image_b64 = base64.b64encode(image_data).decode('utf-8')
-        
-        # Determine mime type
-        ext = Path(image_path).suffix.lower()
-        mime_map = {
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.webp': 'image/webp'
-        }
-        mime_type = mime_map.get(ext, 'image/jpeg')
-        
-        # Upload request with cookie-based auth
-        headers = {
-            'Cookie': f'__Secure-next-auth.session-token={session_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        payload = {
-            'image': image_b64,
-            'mimeType': mime_type
-        }
-        
-        try:
-            response = requests.post(
-                WHISK_UPLOAD_ENDPOINT,
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            # Extract upload ID from response
-            upload_id = data.get('result', {}).get('data', {}).get('uploadId')
-            if not upload_id:
-                raise WhiskError(f"No uploadId in response: {data}")
-                
-            return upload_id
-            
-        except requests.RequestException as e:
-            raise WhiskError(f"Upload request failed: {e}")
+        token = self.oauth_tokens[self._current_token_index % len(self.oauth_tokens)]
+        self._current_token_index += 1
+        return token
     
     def generate_with_references(
         self,
         prompt: str,
         reference_images: Optional[List[str]] = None,
         aspect_ratio: str = "9:16",
-        timeout: int = 120
-    ) -> bytes:
+        timeout: int = 90,
+        debug_callback=None
+    ) -> Optional[Dict[str, Any]]:
         """
-        Generate image using Whisk recipe endpoint with reference images
+        Generate image directly with OAuth token (no upload step needed)
+        
+        Process:
+        1. Encode reference images to base64
+        2. POST to whisk:runImageRecipe with OAuth token
+        3. Return response with imageUrl or imageData
         
         Args:
             prompt: Text prompt for generation
-            reference_images: List of paths to reference images (model, product, etc.)
-            aspect_ratio: Aspect ratio (e.g., "9:16", "16:9", "1:1")
+            reference_images: List of paths to reference images (up to 3)
+            aspect_ratio: "9:16" (PORTRAIT) or "16:9" (LANDSCAPE)
             timeout: Request timeout in seconds
+            debug_callback: Optional callback function for debug messages
             
         Returns:
-            Generated image as bytes
-            
-        Raises:
-            WhiskError: If generation fails
+            Response dict with 'imageUrl' or 'imageData' key, or None on failure
         """
-        oauth_token = self._get_oauth_token()
+        def _log(msg):
+            if debug_callback:
+                debug_callback(msg)
+        
+        # Get OAuth token
+        oauth_token = self._get_next_token()
         if not oauth_token:
-            raise WhiskError("No OAuth token available for Whisk recipe")
+            _log("[ERROR] No OAuth token available")
+            return None
         
-        # Upload reference images
-        uploaded_refs = []
+        # Encode reference images to base64
+        image_data_list = []
         if reference_images:
-            for img_path in reference_images:
+            for img_path in reference_images[:3]:  # Limit to 3 images
                 try:
-                    upload_id = self.upload_image(img_path)
-                    uploaded_refs.append(upload_id)
+                    with open(img_path, 'rb') as f:
+                        img_bytes = f.read()
+                    
+                    # Determine mime type
+                    ext = os.path.splitext(img_path)[1].lower()
+                    mime_type = {
+                        '.png': 'image/png',
+                        '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg',
+                        '.webp': 'image/webp'
+                    }.get(ext, 'image/jpeg')
+                    
+                    # Encode to base64
+                    img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                    image_data_list.append({
+                        "mimeType": mime_type,
+                        "data": img_base64
+                    })
+                    _log(f"[DEBUG] Encoded reference image: {os.path.basename(img_path)}")
                 except Exception as e:
-                    raise WhiskError(f"Failed to upload reference image: {e}")
+                    _log(f"[WARN] Failed to encode image {img_path}: {e}")
+                    continue
         
-        # Build recipe request (REMOVED invalid imageModel parameter)
-        headers = {
-            'Authorization': f'Bearer {oauth_token}',
-            'Content-Type': 'application/json'
+        # Build request payload
+        aspect_map = {
+            "9:16": "PORTRAIT",
+            "16:9": "LANDSCAPE",
+            "1:1": "SQUARE"
         }
         
         payload = {
-            'prompt': prompt,
-            'aspectRatio': aspect_ratio,
-            'references': uploaded_refs
+            "prompt": prompt[:500],  # Limit prompt length
+            "aspectRatio": aspect_map.get(aspect_ratio, "PORTRAIT"),
+            "referenceImages": image_data_list,
+            "numResults": 1
         }
         
+        headers = {
+            "Authorization": f"Bearer {oauth_token}",
+            "Content-Type": "application/json"
+        }
+        
+        # Make request
         try:
+            _log(f"[DEBUG] Sending Whisk request with {len(image_data_list)} references...")
             response = requests.post(
                 WHISK_RECIPE_ENDPOINT,
-                headers=headers,
                 json=payload,
+                headers=headers,
                 timeout=timeout
             )
-            response.raise_for_status()
-            data = response.json()
             
-            # Extract image URL or data from response
-            if 'imageUrl' in data:
-                image_url = data['imageUrl']
-                img_response = requests.get(image_url, timeout=60)
-                img_response.raise_for_status()
-                return img_response.content
-            
-            if 'imageData' in data:
-                return base64.b64decode(data['imageData'])
+            if response.status_code == 200:
+                result = response.json()
+                _log(f"[DEBUG] Whisk success! Response keys: {list(result.keys())}")
+                return self._parse_image_response(result, _log)
+            elif response.status_code in (401, 403):
+                _log(f"[ERROR] OAuth token expired or invalid ({response.status_code})")
+                return None
+            else:
+                _log(f"[ERROR] Whisk API error: {response.status_code} - {response.text[:200]}")
+                return None
                 
-            raise WhiskError(f"No image data in response: {data}")
-            
-        except requests.RequestException as e:
-            raise WhiskError(f"Recipe request failed: {e}")
+        except requests.Timeout:
+            _log(f"[ERROR] Whisk request timeout after {timeout}s")
+            return None
+        except Exception as e:
+            _log(f"[ERROR] Whisk request failed: {e}")
+            return None
+    
+    def _parse_image_response(self, result: Dict[str, Any], _log) -> Optional[Dict[str, Any]]:
+        """Parse image URL or data from Whisk response"""
+        # Check for imageUrl (direct URL to generated image)
+        if "imageUrl" in result:
+            _log("[SUCCESS] Got image URL from Whisk")
+            return {"imageUrl": result["imageUrl"]}
+        
+        # Check for imageData (base64 encoded)
+        if "imageData" in result:
+            _log("[SUCCESS] Got base64 image data from Whisk")
+            return {"imageData": result["imageData"]}
+        
+        # Check for nested results (generatedImages array)
+        if "generatedImages" in result and isinstance(result["generatedImages"], list):
+            if len(result["generatedImages"]) > 0:
+                first_img = result["generatedImages"][0]
+                if "imageUrl" in first_img:
+                    _log("[SUCCESS] Got image URL from generatedImages[0]")
+                    return {"imageUrl": first_img["imageUrl"]}
+                if "imageData" in first_img:
+                    _log("[SUCCESS] Got image data from generatedImages[0]")
+                    return {"imageData": first_img["imageData"]}
+        
+        _log(f"[ERROR] No image data in Whisk response: {list(result.keys())}")
+        return None
 
 
-# Legacy/simplified interface functions
 
+# Simplified interface function for backward compatibility
 def generate_image(
     prompt: str,
     model_image: Optional[str] = None,
     product_image: Optional[str] = None,
-    timeout: int = 120
+    timeout: int = 90
 ) -> bytes:
     """
     Simplified interface for generating images with model and product references
-    Uses WhiskClient with auto-fallback to Gemini on failure
+    Uses simplified OAuth-only WhiskClient with auto-fallback to Gemini on failure
     
     Args:
         prompt: Text prompt for image generation
@@ -231,9 +211,9 @@ def generate_image(
         Generated image as bytes
         
     Raises:
-        WhiskError: If generation fails
+        WhiskError: If both Whisk and Gemini fail
     """
-    # Try Whisk first
+    # Try Whisk first with OAuth-only approach
     try:
         client = WhiskClient()
         reference_images = []
@@ -242,11 +222,26 @@ def generate_image(
         if product_image:
             reference_images.append(product_image)
         
-        return client.generate_with_references(
+        result = client.generate_with_references(
             prompt=prompt,
             reference_images=reference_images if reference_images else None,
             timeout=timeout
         )
+        
+        if result:
+            # Download image from URL
+            if "imageUrl" in result:
+                img_response = requests.get(result["imageUrl"], timeout=60)
+                img_response.raise_for_status()
+                return img_response.content
+            
+            # Decode base64 image data
+            if "imageData" in result:
+                return base64.b64decode(result["imageData"])
+        
+        # If no result, fall through to Gemini
+        raise WhiskError("No image data returned from Whisk")
+        
     except Exception as whisk_error:
         # Auto-fallback to Gemini
         try:
@@ -254,5 +249,6 @@ def generate_image(
             img_data = image_gen_service.generate_image_gemini(prompt, timeout)
             if img_data:
                 return img_data
+            raise WhiskError(f"Gemini returned no data")
         except Exception as gemini_error:
             raise WhiskError(f"Whisk failed: {whisk_error}. Gemini fallback failed: {gemini_error}")
