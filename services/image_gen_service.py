@@ -73,7 +73,10 @@ def generate_image_gemini(prompt: str, timeout: int = None, retry_delay: float =
                 else:
                     log("[ERROR] All API keys are rate limited!")
                     # Get retry-after for last key
-                    retry_after = int(response.headers.get('Retry-After', 60))
+                    try:
+                        retry_after = int(response.headers.get('Retry-After', 60))
+                    except (ValueError, TypeError):
+                        retry_after = 60  # Fallback if header is invalid
                     log(f"[INFO] Waiting {retry_after}s before final retry...")
                     time.sleep(retry_after)
                     # One final retry with first key
