@@ -58,15 +58,8 @@ class SceneCardWidget(QFrame):
         self._build_ui()
     
     def _build_ui(self):
-        """Build the scene card UI"""
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: {COLORS['right_card']};
-                border: 1px solid {COLORS['right_border']};
-                border-radius: 8px;
-                padding: 10px;
-            }}
-        """)
+        """Build the scene card UI - using unified theme"""
+        # Styling handled by unified theme
         
         layout = QHBoxLayout(self)
         
@@ -74,7 +67,6 @@ class SceneCardWidget(QFrame):
         self.image_label = QLabel()
         self.image_label.setFixedSize(320, 180)  # 16:9 preview
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setStyleSheet(f"border: 1px dashed {COLORS['right_border']}; background: black;")
         self.image_label.setText("Chưa tạo")
         layout.addWidget(self.image_label)
         
@@ -83,7 +75,7 @@ class SceneCardWidget(QFrame):
         
         # Title
         title = QLabel(f"Cảnh {self.scene_data.get('index')}")
-        title.setStyleSheet(f"color: {COLORS['right_accent']}; font-weight: bold; font-size: 16px;")
+        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
         info_layout.addWidget(title)
         
         # Description
@@ -92,7 +84,6 @@ class SceneCardWidget(QFrame):
             desc_text = desc_text[:150] + "..."
         desc = QLabel(desc_text)
         desc.setWordWrap(True)
-        desc.setStyleSheet(f"color: {COLORS['right_text']}; font-size: 12px;")
         info_layout.addWidget(desc)
         
         # Speech text
@@ -101,7 +92,7 @@ class SceneCardWidget(QFrame):
             speech_text = speech_text[:100] + "..."
         speech = QLabel(f"🎤 {speech_text}")
         speech.setWordWrap(True)
-        speech.setStyleSheet(f"color: #aaa; font-size: 11px; font-style: italic;")
+        speech.setFont(QFont("Segoe UI", 11))
         info_layout.addWidget(speech)
         
         info_layout.addStretch(1)
@@ -109,56 +100,17 @@ class SceneCardWidget(QFrame):
         # Action buttons
         btn_layout = QHBoxLayout()
         
-        # Prompt button
+        # Prompt button - using unified theme
         btn_prompt = QPushButton("📝 Prompt ảnh/video")
-        btn_prompt.setStyleSheet("""
-            QPushButton {
-                background: #4A5568;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background: #60a5fa;
-            }
-        """)
         btn_prompt.clicked.connect(self._show_prompts)
         btn_layout.addWidget(btn_prompt)
         
-        # Regenerate button
+        # Regenerate button - using unified theme
         btn_regen = QPushButton("🔄 Tạo lại")
-        btn_regen.setStyleSheet("""
-            QPushButton {
-                background: #4A5568;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background: #26A69A;
-            }
-        """)
         btn_layout.addWidget(btn_regen)
         
-        # Video button
+        # Video button - using unified theme
         btn_video = QPushButton("🎬 Video")
-        btn_video.setStyleSheet("""
-            QPushButton {
-                background: #4A5568;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background: #0E7C66;
-            }
-        """)
         btn_layout.addWidget(btn_video)
         
         info_layout.addLayout(btn_layout)
@@ -166,40 +118,11 @@ class SceneCardWidget(QFrame):
         layout.addLayout(info_layout, 1)
     
     def _show_prompts(self):
-        """Show prompt dialog with image and video prompts"""
+        """Show prompt dialog with image and video prompts - using unified theme"""
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Prompts - Cảnh {self.scene_data.get('index')}")
         dialog.setFixedSize(700, 500)
-        dialog.setStyleSheet(f"""
-            QDialog {{
-                background: {COLORS['right_bg']};
-            }}
-            QLabel {{
-                color: {COLORS['right_text']};
-                font-weight: bold;
-                font-size: 13px;
-            }}
-            QTextEdit {{
-                background: {COLORS['right_card']};
-                color: {COLORS['right_text']};
-                border: 1px solid {COLORS['right_border']};
-                border-radius: 4px;
-                padding: 8px;
-                font-family: monospace;
-                font-size: 11px;
-            }}
-            QPushButton {{
-                background: {COLORS['right_accent']};
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 8px 16px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background: #4A90E2;
-            }}
-        """)
+        # Styling handled by unified theme
         
         layout = QVBoxLayout(dialog)
         
@@ -246,10 +169,10 @@ class SceneCardWidget(QFrame):
         QMessageBox.information(self, "Thành công", "Đã copy vào clipboard!")
     
     def set_image(self, pixmap):
-        """Set the preview image"""
+        """Set the preview image - using unified theme"""
         if self.image_label:
             self.image_label.setPixmap(pixmap.scaled(320, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            self.image_label.setStyleSheet(f"border: 1px solid {COLORS['right_border']}; background: black;")
+            # Border styling handled by unified theme
 
 
 class ImageGenerationWorker(QThread):
@@ -408,19 +331,19 @@ class VideoBanHangPanel(QWidget):
         main.setSpacing(0)
         main.setContentsMargins(0, 0, 0, 0)
         
-        # Left column (380px fixed, light blue)
+        # Left column (380px fixed)
         self.left_widget = QWidget()
         self.left_widget.setFixedWidth(380)
-        self.left_widget.setStyleSheet(f"background-color: {COLORS['left_bg']};")
+        # Background color will be handled by unified theme
         left_layout = QVBoxLayout(self.left_widget)
         left_layout.setContentsMargins(10, 10, 10, 10)
         left_layout.setSpacing(10)
         
         self._build_left_column(left_layout)
         
-        # Right column (flexible, dark)
+        # Right column (flexible) - using unified Material Design theme
         self.right_widget = QWidget()
-        self.right_widget.setStyleSheet(f"background-color: {COLORS['right_bg']};")
+        # Background color will be handled by unified theme
         right_layout = QVBoxLayout(self.right_widget)
         right_layout.setContentsMargins(10, 10, 10, 10)
         right_layout.setSpacing(10)
@@ -605,32 +528,8 @@ class VideoBanHangPanel(QWidget):
     def _build_right_column(self, layout):
         """Build right column with results and logs"""
         
-        # Tab widget for results
+        # Tab widget for results - using unified theme
         self.results_tabs = QTabWidget()
-        self.results_tabs.setStyleSheet(f"""
-            QTabWidget::pane {{
-                background: {LIGHT_COLORS['background']};
-                border: 1px solid {LIGHT_COLORS['border']};
-                border-radius: 4px;
-            }}
-            QTabBar::tab {{
-                background: {LIGHT_COLORS['hover']};
-                color: #757575;
-                padding: 10px 20px;
-                margin-right: 4px;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                font-size: 13px;
-            }}
-            QTabBar::tab:selected {{
-                background: {LIGHT_COLORS['background']};
-                color: {LIGHT_COLORS['primary']};
-                border-bottom: 3px solid {LIGHT_COLORS['primary']};
-            }}
-            QTabBar::tab:hover {{
-                background: #EEEEEE;
-            }}
-        """)
         
         # Tab 1: Scenes (card list)
         scenes_tab = self._build_scenes_tab()
@@ -646,27 +545,14 @@ class VideoBanHangPanel(QWidget):
         
         layout.addWidget(self.results_tabs, 3)
         
-        # Log area
+        # Log area - using unified theme
         gb_log = QGroupBox("Nhật ký xử lý")
-        gb_log.setStyleSheet(f"""
-            QGroupBox {{
-                font-weight: bold;
-                font-size: 14px;
-                color: {COLORS['right_text']};
-                border: 1px solid {COLORS['right_border']};
-                border-radius: 8px;
-                margin-top: 10px;
-                padding: 10px;
-                background: {COLORS['right_card']};
-            }}
-        """)
         
         lv = QVBoxLayout(gb_log)
         self.ed_log = QPlainTextEdit()
         self.ed_log.setFont(FONT_INPUT)
         self.ed_log.setReadOnly(True)
         self.ed_log.setMaximumHeight(150)
-        self.ed_log.setStyleSheet(f"background: {COLORS['right_bg']}; color: {COLORS['right_text']};")
         lv.addWidget(self.ed_log)
         
         layout.addWidget(gb_log, 1)
@@ -698,7 +584,7 @@ class VideoBanHangPanel(QWidget):
         """Build scenes tab with vertical card list"""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {LIGHT_COLORS['background']}; }}")
+        # Styling handled by unified theme
         
         container = QWidget()
         self.scenes_layout = QVBoxLayout(container)
@@ -716,45 +602,24 @@ class VideoBanHangPanel(QWidget):
         """Build thumbnail tab"""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {LIGHT_COLORS['background']}; }}")
+        # Styling handled by unified theme
         
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
         
-        # Create 3 thumbnail version widgets
+        # Create 3 thumbnail version widgets - using unified theme
         self.thumbnail_widgets = []
         for i in range(3):
             # Version card
-            version_card = QFrame()
-            version_card.setStyleSheet(f"""
-                QFrame {{
-                    background: {LIGHT_COLORS['card']};
-                    border: 1px solid {LIGHT_COLORS['border']};
-                    border-radius: 8px;
-                    padding: 16px;
-                }}
-            """)
+            version_card = QGroupBox(f"Phiên bản {i+1}")
             
             card_layout = QVBoxLayout(version_card)
-            
-            # Title
-            lbl_title = QLabel(f"Phiên bản {i+1}")
-            lbl_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
-            lbl_title.setStyleSheet(f"color: {LIGHT_COLORS['primary']};")
-            card_layout.addWidget(lbl_title)
             
             # Thumbnail image
             img_thumb = QLabel()
             img_thumb.setFixedSize(270, 480)  # 9:16 ratio
-            img_thumb.setStyleSheet(f"""
-                QLabel {{
-                    background: {LIGHT_COLORS['hover']};
-                    border: 1px solid {LIGHT_COLORS['border']};
-                    border-radius: 4px;
-                }}
-            """)
             img_thumb.setAlignment(Qt.AlignCenter)
             img_thumb.setText("Chưa tạo")
             card_layout.addWidget(img_thumb)
@@ -770,7 +635,7 @@ class VideoBanHangPanel(QWidget):
         """Build social media tab"""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {LIGHT_COLORS['background']}; }}")
+        # Styling handled by unified theme
         
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -780,82 +645,33 @@ class VideoBanHangPanel(QWidget):
         # Create 3 social version widgets
         self.social_version_widgets = []
         for i in range(3):
-            # Version card
-            version_card = QFrame()
-            version_card.setStyleSheet(f"""
-                QFrame {{
-                    background: {LIGHT_COLORS['card']};
-                    border: 1px solid {LIGHT_COLORS['border']};
-                    border-radius: 8px;
-                    padding: 16px;
-                }}
-            """)
+            # Version card - using unified theme
+            version_card = QGroupBox(f"Phiên bản {i+1}")
             
             card_layout = QVBoxLayout(version_card)
-            
-            # Title
-            lbl_title = QLabel(f"Phiên bản {i+1}")
-            lbl_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
-            lbl_title.setStyleSheet(f"color: {LIGHT_COLORS['primary']};")
-            card_layout.addWidget(lbl_title)
             
             # Caption
             lbl_caption = QLabel("Caption:")
             lbl_caption.setFont(QFont("Segoe UI", 12, QFont.Bold))
-            lbl_caption.setStyleSheet(f"color: {LIGHT_COLORS['text_secondary']};")
             card_layout.addWidget(lbl_caption)
             
             ed_caption = QTextEdit()
             ed_caption.setMaximumHeight(100)
-            ed_caption.setStyleSheet(f"""
-                QTextEdit {{
-                    background: {LIGHT_COLORS['hover']};
-                    color: {LIGHT_COLORS['text_primary']};
-                    border: 1px solid {LIGHT_COLORS['border']};
-                    border-radius: 4px;
-                    padding: 8px;
-                }}
-            """)
             ed_caption.setReadOnly(True)
             card_layout.addWidget(ed_caption)
             
             # Copy button
             btn_copy = QPushButton("📋 Copy Caption")
-            btn_copy.setStyleSheet(f"""
-                QPushButton {{
-                    background: transparent;
-                    border: 1px solid {LIGHT_COLORS['divider']};
-                    border-radius: 4px;
-                    padding: 6px 12px;
-                    color: {LIGHT_COLORS['text_secondary']};
-                    font-size: 11px;
-                }}
-                QPushButton:hover {{
-                    background: {LIGHT_COLORS['hover']};
-                    border-color: {LIGHT_COLORS['primary']};
-                    color: {LIGHT_COLORS['primary']};
-                }}
-            """)
             btn_copy.clicked.connect(lambda _, e=ed_caption: self._copy_to_clipboard(e.toPlainText()))
             card_layout.addWidget(btn_copy)
             
             # Hashtags
             lbl_hashtags = QLabel("Hashtags:")
             lbl_hashtags.setFont(QFont("Segoe UI", 12, QFont.Bold))
-            lbl_hashtags.setStyleSheet(f"color: {LIGHT_COLORS['text_secondary']};")
             card_layout.addWidget(lbl_hashtags)
             
             ed_hashtags = QTextEdit()
             ed_hashtags.setMaximumHeight(60)
-            ed_hashtags.setStyleSheet(f"""
-                QTextEdit {{
-                    background: {LIGHT_COLORS['hover']};
-                    color: {LIGHT_COLORS['text_primary']};
-                    border: 1px solid {LIGHT_COLORS['border']};
-                    border-radius: 4px;
-                    padding: 8px;
-                }}
-            """)
             ed_hashtags.setReadOnly(True)
             card_layout.addWidget(ed_hashtags)
             
@@ -872,19 +688,9 @@ class VideoBanHangPanel(QWidget):
         return scroll
     
     def _create_group(self, title):
-        """Create a styled group box"""
+        """Create a styled group box - using unified theme"""
         gb = QGroupBox(title)
-        gb.setStyleSheet(f"""
-            QGroupBox {{
-                font-weight: bold;
-                font-size: 13px;
-                background: {COLORS['left_group']};
-                border: 1px solid {COLORS['left_border']};
-                border-radius: 8px;
-                margin-top: 8px;
-                padding: 10px;
-            }}
-        """)
+        # Styling handled by unified theme
         return gb
     
     def _update_scenes(self):
@@ -1161,13 +967,7 @@ class VideoBanHangPanel(QWidget):
             widget_data['thumbnail'].setPixmap(
                 pixmap.scaled(270, 480, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
-            widget_data['thumbnail'].setStyleSheet(f"""
-                QLabel {{
-                    background: {LIGHT_COLORS['hover']};
-                    border: 1px solid {LIGHT_COLORS['border']};
-                    border-radius: 4px;
-                }}
-            """)
+            # Styling handled by unified theme
         
         self._append_log(f"✓ Thumbnail phiên bản {version_idx+1} đã sẵn sàng")
     
