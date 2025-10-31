@@ -21,7 +21,6 @@ from services import sales_script_service as sscript
 from services import image_gen_service
 from services.gemini_client import MissingAPIKey
 from ui.widgets.scene_card import SceneCard
-from ui.styles.light_theme import COLORS as LIGHT_COLORS
 from ui.workers.script_worker import ScriptWorker
 
 # Fonts
@@ -33,19 +32,6 @@ FONT_INPUT.setPixelSize(12)
 # Sizes
 THUMBNAIL_SIZE = 60
 MODEL_IMG = 128
-
-# Color scheme
-COLORS = {
-    'left_bg': '#e8f4f8',
-    'left_group': '#f0f8fc',
-    'left_border': '#c5e1eb',
-    'left_button': '#0891b2',
-    'right_bg': '#1a202c',
-    'right_card': '#2d3748',
-    'right_border': '#4a5568',
-    'right_text': '#e2e8f0',
-    'right_accent': '#60a5fa',
-}
 
 
 class SceneCardWidget(QFrame):
