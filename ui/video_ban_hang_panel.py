@@ -301,7 +301,8 @@ class ImageGenerationWorker(QThread):
                 if img_data is None:
                     try:
                         # Use Gemini image generation with rate limiting and debug logging
-                        delay = 2.5 if i > 0 else 0
+                        # 8s delay for Gemini free tier (15 req/min = 4s min, use 8s to be safe)
+                        delay = 8.0 if i > 0 else 0
                         self.progress.emit(f"Cảnh {scene.get('index')}: Dùng Gemini...")
                         
                         # Pass log callback for enhanced debug output
@@ -336,8 +337,8 @@ class ImageGenerationWorker(QThread):
                 
                 # Generate base thumbnail image
                 try:
-                    # Rate limit: 2.5s delay
-                    delay = 2.5 if (len(scenes) + i) > 0 else 0
+                    # Rate limit: 8s delay for Gemini free tier (15 req/min)
+                    delay = 8.0 if (len(scenes) + i) > 0 else 0
                     thumb_data = image_gen_service.generate_image_with_rate_limit(
                         prompt, 
                         delay,

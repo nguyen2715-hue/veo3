@@ -74,7 +74,7 @@ class WhiskClient:
         
         return None
     
-    def upload_image(self, image_path: str, workflow_id: str, session_id: str) -> Optional[str]:
+    def upload_image(self, image_path: str, workflow_id: str, session_id: str, debug_callback=None) -> Optional[str]:
         """
         Step 1: Upload image with Session Token
         
@@ -82,6 +82,7 @@ class WhiskClient:
             image_path: Path to the image file
             workflow_id: Workflow UUID for this generation session
             session_id: Session ID for this generation (format: ;timestamp)
+            debug_callback: Optional callback for debug logging
             
         Returns:
             mediaGenerationId for use in recipe
@@ -89,8 +90,14 @@ class WhiskClient:
         Raises:
             WhiskError: If upload fails
         """
+        def _log(msg):
+            if debug_callback:
+                debug_callback(msg)
+            print(msg)  # Always log to console
+        
         session_token = self._get_session_token()
         if not session_token:
+            _log("[ERROR] No session token available for Whisk upload")
             raise WhiskError("No session token available for Whisk upload")
         
         # Read image file
@@ -136,23 +143,29 @@ class WhiskClient:
         }
         
         try:
+            _log(f"[INFO] Whisk: Uploading {Path(image_path).name}...")
             response = requests.post(
                 WHISK_UPLOAD_ENDPOINT,
                 headers=headers,
                 json=payload,
                 timeout=60
             )
+            
+            _log(f"[INFO] Whisk: Upload response status {response.status_code}")
             response.raise_for_status()
             data = response.json()
             
             # Extract mediaGenerationId from response
             media_id = data.get('result', {}).get('data', {}).get('json', {}).get('mediaGenerationId')
             if not media_id:
+                _log(f"[ERROR] No mediaGenerationId in upload response")
                 raise WhiskError(f"No mediaGenerationId in response: {data}")
-                
+            
+            _log(f"[SUCCESS] Whisk: Uploaded successfully, got media ID")
             return media_id
             
         except requests.RequestException as e:
+            _log(f"[ERROR] Whisk: Upload failed: {e}")
             raise WhiskError(f"Upload request failed: {e}")
     
     def generate_with_media_ids(
@@ -162,7 +175,8 @@ class WhiskClient:
         workflow_id: str, 
         session_id: str,
         aspect_ratio: str = "9:16",
-        timeout: int = DEFAULT_GENERATION_TIMEOUT
+        timeout: int = DEFAULT_GENERATION_TIMEOUT,
+        debug_callback=None
     ) -> Optional[Dict[str, Any]]:
         """
         Step 2: Generate with OAuth Token using uploaded media IDs
@@ -185,6 +199,7 @@ class WhiskClient:
         def _log(msg):
             if debug_callback:
                 debug_callback(msg)
+            print(msg)  # Always log to console
         
         # Get OAuth token
         oauth_token = self._get_next_token()
@@ -232,7 +247,7 @@ class WhiskClient:
         
         # Make request
         try:
-            _log(f"[DEBUG] Sending Whisk request with {len(image_data_list)} references...")
+            _log(f"[INFO] Whisk: Sending generation request with {len(media_ids)} references...")
             response = requests.post(
                 WHISK_RECIPE_ENDPOINT,
                 json=payload,
@@ -240,13 +255,27 @@ class WhiskClient:
                 timeout=timeout
             )
             
-            # Extract image URL from response
-            if 'generatedImages' in data and data['generatedImages']:
-                return {"imageUrl": data['generatedImages'][0].get('imageUrl')}
+            _log(f"[INFO] Whisk: Response status {response.status_code}")
             
-            raise WhiskError(f"No generatedImages in response: {data}")
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Extract image URL from response
+                if 'generatedImages' in data and data['generatedImages']:
+                    _log("[SUCCESS] Whisk: Image generated!")
+                    return {"imageUrl": data['generatedImages'][0].get('imageUrl')}
+                
+                _log(f"[ERROR] No generatedImages in response: {data}")
+                raise WhiskError(f"No generatedImages in response: {data}")
+            else:
+                _log(f"[ERROR] Whisk failed: HTTP {response.status_code}")
+                raise WhiskError(f"HTTP {response.status_code}: {response.text[:200]}")
             
+        except requests.Timeout:
+            _log(f"[ERROR] Whisk timeout after {timeout}s")
+            raise WhiskError(f"Timeout after {timeout}s")
         except requests.RequestException as e:
+            _log(f"[ERROR] Whisk request failed: {e}")
             raise WhiskError(f"Recipe request failed: {e}")
     
     def generate_with_references(
@@ -289,8 +318,8 @@ class WhiskClient:
         if reference_images:
             for i, img_path in enumerate(reference_images[:MAX_REFERENCE_IMAGES]):
                 try:
-                    log(f"[DEBUG] Uploading {Path(img_path).name}...")
-                    media_id = self.upload_image(img_path, workflow_id, session_id)
+                    log(f"[INFO] Uploading image {i+1}/{len(reference_images[:MAX_REFERENCE_IMAGES])}...")
+                    media_id = self.upload_image(img_path, workflow_id, session_id, debug_callback=debug_callback)
                     if media_id:
                         media_ids.append(media_id)
                         log(f"[SUCCESS] Got mediaGenerationId: {media_id[:20]}...")
@@ -305,7 +334,7 @@ class WhiskClient:
         # Step 2: Generate with media IDs
         result = self.generate_with_media_ids(
             prompt, media_ids, workflow_id, session_id, 
-            aspect_ratio, timeout
+            aspect_ratio, timeout, debug_callback=debug_callback
         )
         
         if result and result.get("imageUrl"):
