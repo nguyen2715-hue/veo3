@@ -29,15 +29,17 @@ class WhiskError(Exception):
 class WhiskClient:
     """Simplified Whisk client using only OAuth token"""
     
-    def __init__(self, oauth_tokens: Optional[List[str]] = None):
+    def __init__(self, oauth_tokens: Optional[List[str]] = None, session_tokens: Optional[List[str]] = None):
         """
         Initialize Whisk client
         
         Args:
             oauth_tokens: OAuth tokens from "Google Labs Token" field in Settings
                          (saved as 'labs_tokens' or 'tokens' in config)
+            session_tokens: Session tokens for cookie-based upload auth
         """
         self.oauth_tokens = oauth_tokens or []
+        self.session_tokens = session_tokens or []
         self._current_token_index = 0
     
     def _get_session_token(self) -> Optional[str]:
@@ -202,7 +204,7 @@ class WhiskClient:
             print(msg)  # Always log to console
         
         # Get OAuth token
-        oauth_token = self._get_next_token()
+        oauth_token = self._get_oauth_token()
         if not oauth_token:
             raise WhiskError("No OAuth token available for Whisk generation")
         
