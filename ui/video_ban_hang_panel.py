@@ -201,7 +201,7 @@ class ImageGenerationWorker(QThread):
                             prompt=prompt,
                             model_image=self.model_paths[0] if self.model_paths else None,
                             product_image=self.prod_paths[0] if self.prod_paths else None,
-                            debug_callback=lambda msg: self.progress.emit(msg)
+                            debug_callback=self.progress.emit
                         )
                         if img_data:
                             self.progress.emit(f"Cảnh {scene.get('index')}: Whisk ✓")
