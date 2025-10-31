@@ -196,14 +196,17 @@ class ImageGenerationWorker(QThread):
                     # Try Whisk first
                     try:
                         from services import whisk_service
+                        # Pass progress callback for detailed logging
                         img_data = whisk_service.generate_image(
                             prompt=prompt,
                             model_image=self.model_paths[0] if self.model_paths else None,
-                            product_image=self.prod_paths[0] if self.prod_paths else None
+                            product_image=self.prod_paths[0] if self.prod_paths else None,
+                            debug_callback=self.progress.emit
                         )
-                        self.progress.emit(f"Cảnh {scene.get('index')}: Dùng Whisk ✓")
+                        if img_data:
+                            self.progress.emit(f"Cảnh {scene.get('index')}: Whisk ✓")
                     except Exception as e:
-                        self.progress.emit(f"Whisk failed: {e}, fallback to Gemini...")
+                        self.progress.emit(f"Whisk failed: {str(e)[:100]}")
                         img_data = None
                 
                 # Fallback to Gemini or if Whisk not enabled

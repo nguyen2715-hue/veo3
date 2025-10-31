@@ -63,20 +63,29 @@ def generate_image_gemini(prompt: str, timeout: int = None, retry_delay: float =
             
             log(f"[DEBUG] HTTP {response.status_code}")
             
-            # Handle rate limiting with exponential backoff
+            # Handle rate limiting - skip to next key immediately (don't wait)
             if response.status_code == 429:
-                try:
-                    retry_after = int(response.headers.get('Retry-After', 60))
-                except (ValueError, TypeError):
-                    retry_after = 60  # Fallback to 60s if header is invalid
-                log(f"[WARNING] Rate limit 429 on key {key_preview}, waiting {retry_after}s...")
-                time.sleep(retry_after)
+                log(f"[WARNING] Key {key_preview} rate limited, trying next key...")
                 
+                # Skip to next key immediately (don't wait)
                 if key_idx < len(keys) - 1:
-                    # Try next key
-                    continue
+                    continue  # Try next key now!
                 else:
-                    raise ImageGenError("Rate limit exceeded on all keys")
+                    log("[ERROR] All API keys are rate limited!")
+                    # Get retry-after for last key
+                    try:
+                        retry_after = int(response.headers.get('Retry-After', 60))
+                    except (ValueError, TypeError):
+                        retry_after = 60  # Fallback if header is invalid
+                    log(f"[INFO] Waiting {retry_after}s before final retry...")
+                    time.sleep(retry_after)
+                    # One final retry with first key
+                    response = requests.post(gemini_image_endpoint(keys[0]), json=payload, timeout=timeout)
+                    if response.status_code == 200:
+                        # Success after wait - continue to image extraction below
+                        log("[SUCCESS] Final retry succeeded")
+                    else:
+                        raise ImageGenError("All API keys exhausted quota")
             
             # Parse error responses
             if response.status_code != 200:

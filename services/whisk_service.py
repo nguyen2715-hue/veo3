@@ -289,7 +289,7 @@ class WhiskClient:
         debug_callback=None
     ) -> Optional[Dict[str, Any]]:
         """
-        Complete 3-step workflow: Upload → Generate → Result
+        Complete 3-step workflow: Upload → Generate → Result with detailed progress logging
         
         Args:
             prompt: Text prompt for generation
@@ -305,45 +305,60 @@ class WhiskClient:
             WhiskError: If generation fails
         """
         def log(msg):
+            """Log to both callback and console"""
+            print(msg)  # Always print to console
             if debug_callback:
                 debug_callback(msg)
         
-        # Generate workflow ID and session ID
-        workflow_id = str(uuid.uuid4())
-        # Session ID format from real traffic: semicolon followed by timestamp in milliseconds
-        session_id = f";{int(time.time() * 1000)}"
-        
-        log(f"[INFO] Step 1/3: Uploading reference images...")
-        
-        # Step 1: Upload all reference images
-        media_ids = []
-        if reference_images:
-            for i, img_path in enumerate(reference_images[:MAX_REFERENCE_IMAGES]):
-                try:
-                    log(f"[INFO] Uploading image {i+1}/{len(reference_images[:MAX_REFERENCE_IMAGES])}...")
-                    media_id = self.upload_image(img_path, workflow_id, session_id, debug_callback=debug_callback)
-                    if media_id:
-                        media_ids.append(media_id)
-                        log(f"[SUCCESS] Got mediaGenerationId: {media_id[:20]}...")
-                except Exception as e:
-                    log(f"[WARN] Failed to upload {img_path}: {e}")
-        
-        if not media_ids:
-            raise WhiskError("No images uploaded successfully")
-        
-        log(f"[INFO] Step 2/3: Generating image...")
-        
-        # Step 2: Generate with media IDs
-        result = self.generate_with_media_ids(
-            prompt, media_ids, workflow_id, session_id, 
-            aspect_ratio, timeout, debug_callback=debug_callback
-        )
-        
-        if result and result.get("imageUrl"):
-            log(f"[SUCCESS] Got image URL: {result['imageUrl'][:50]}...")
-            log(f"[INFO] Step 3/3: Image ready")
-        
-        return result
+        try:
+            log("[INFO] Whisk: Starting generation...")
+            
+            # Generate workflow ID and session ID
+            workflow_id = str(uuid.uuid4())
+            # Session ID format from real traffic: semicolon followed by timestamp in milliseconds
+            session_id = f";{int(time.time() * 1000)}"
+            
+            # Upload reference images
+            media_ids = []
+            if reference_images:
+                log(f"[INFO] Whisk: Uploading {len(reference_images)} reference images...")
+                for i, img_path in enumerate(reference_images[:MAX_REFERENCE_IMAGES]):
+                    log(f"[INFO] Whisk: Uploading image {i+1}/{len(reference_images[:MAX_REFERENCE_IMAGES])}...")
+                    try:
+                        media_id = self.upload_image(img_path, workflow_id, session_id, debug_callback=debug_callback)
+                        if media_id:
+                            media_ids.append(media_id)
+                            log(f"[SUCCESS] Whisk: Uploaded {Path(img_path).name}")
+                        else:
+                            log(f"[ERROR] Whisk: Upload failed for {Path(img_path).name}")
+                    except Exception as e:
+                        log(f"[ERROR] Whisk: Upload error - {str(e)[:100]}")
+            
+            if not media_ids:
+                log("[ERROR] Whisk: No images uploaded successfully")
+                raise WhiskError("No images uploaded")
+            
+            log(f"[INFO] Whisk: Generating image with {len(media_ids)} references...")
+            
+            # Generate with timeout
+            result = self.generate_with_media_ids(
+                prompt, media_ids, workflow_id, session_id,
+                aspect_ratio=aspect_ratio, timeout=timeout, debug_callback=debug_callback
+            )
+            
+            if result and result.get("imageUrl"):
+                log("[SUCCESS] Whisk: Image generated successfully!")
+                return result
+            else:
+                log("[ERROR] Whisk: No image URL in response")
+                raise WhiskError("No image URL in response")
+                
+        except requests.Timeout:
+            log(f"[ERROR] Whisk: Request timeout after {timeout}s")
+            raise WhiskError(f"Timeout after {timeout}s")
+        except Exception as e:
+            log(f"[ERROR] Whisk: Generation failed - {str(e)[:150]}")
+            raise WhiskError(str(e))
 
 
 
@@ -352,7 +367,8 @@ def generate_image(
     prompt: str,
     model_image: Optional[str] = None,
     product_image: Optional[str] = None,
-    timeout: int = 90
+    timeout: int = 90,
+    debug_callback=None
 ) -> bytes:
     """
     Simplified interface for generating images with model and product references
@@ -363,6 +379,7 @@ def generate_image(
         model_image: Path to model/person reference image
         product_image: Path to product reference image
         timeout: Request timeout in seconds
+        debug_callback: Optional callback for debug logging
         
     Returns:
         Generated image as bytes
@@ -382,7 +399,8 @@ def generate_image(
         result = client.generate_with_references(
             prompt=prompt,
             reference_images=reference_images if reference_images else None,
-            timeout=timeout
+            timeout=timeout,
+            debug_callback=debug_callback
         )
         
         # Step 3: Download image
