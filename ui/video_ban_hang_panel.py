@@ -809,6 +809,7 @@ class VideoBanHangPanel(QWidget):
         
         self._append_log("Bắt đầu tạo kịch bản...")
         self.btn_script.setEnabled(False)
+        self.btn_script.setText("⏳ Đang tạo...")
         
         # Use worker thread for non-blocking script generation
         self.script_worker = ScriptWorker(cfg)
@@ -851,6 +852,7 @@ class VideoBanHangPanel(QWidget):
             self._append_log(f"❌ Lỗi hiển thị: {e}")
         finally:
             self.btn_script.setEnabled(True)
+            self.btn_script.setText("📝 Viết kịch bản")
     
     def _on_script_error(self, error_msg):
         """Handle script generation error"""
@@ -863,6 +865,7 @@ class VideoBanHangPanel(QWidget):
             QMessageBox.critical(self, "Lỗi", error_msg)
             self._append_log(f"❌ Lỗi: {error_msg}")
         self.btn_script.setEnabled(True)
+        self.btn_script.setText("📝 Viết kịch bản")
     
     def _display_scene_cards(self, scenes):
         """Display scene cards in the results area"""
