@@ -120,19 +120,22 @@ def generate_image_gemini(prompt: str, timeout: int = None, retry_delay: float =
     raise ImageGenError("Image generation failed with all keys")
 
 
-def generate_image_with_rate_limit(prompt: str, delay: float = 5.0, log_callback=None) -> Optional[bytes]:
+def generate_image_with_rate_limit(prompt: str, delay: float = 8.0, log_callback=None) -> Optional[bytes]:
     """
     Generate image with automatic rate limiting delay
     
     Args:
         prompt: Text prompt
-        delay: Delay in seconds before generation (default 5.0s for 15 req/min limit)
+        delay: Delay in seconds before generation (default 8.0s for 15 req/min limit)
+               Safe delay: 60s / 15 requests = 4s min, use 8s to be safe
         log_callback: Optional callback function for logging
         
     Returns:
         Image bytes or None if failed
     """
     if delay > 0:
+        if log_callback:
+            log_callback(f"[INFO] Waiting {delay}s for rate limit...")
         time.sleep(delay)
     try:
         return generate_image_gemini(prompt, log_callback=log_callback)
